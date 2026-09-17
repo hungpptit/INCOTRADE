@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: incotrade_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: booking_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  pgweb:
+    image: sosedoff/pgweb
+    container_name: incotrade_pgweb
+    restart: always
+    environment:
+      DATABASE_URL: postgres://postgres:password123@postgres:5432/booking_db?sslmode=disable
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

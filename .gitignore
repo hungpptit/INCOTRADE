@@ -1,0 +1,26 @@
+# Custom ignore
+docs/
+UI/
+# Dotnet / C# ignores
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.dotCover
+
+# Node / Next.js ignores
+node_modules/
+.next/
+out/
+build/
+dist/
+.env*.local
+.env
+
+# OS / Editor ignores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
