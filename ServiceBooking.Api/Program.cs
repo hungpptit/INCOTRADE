@@ -21,6 +21,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ==========================================================
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IServiceManagementService, ServiceManagementService>();
+builder.Services.AddScoped<IStaffManagementService, StaffManagementService>();
+builder.Services.AddScoped<IBookingService, BookingService>();
 
 // ==========================================================
 // 3. CẤU HÌNH JWT AUTHENTICATION & AUTHORIZATION

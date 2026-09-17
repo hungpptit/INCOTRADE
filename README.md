@@ -131,3 +131,32 @@ INCOTRADE/
    $$\text{NewStart} < \text{ExistingEnd} \quad \text{AND} \quad \text{NewEnd} > \text{ExistingStart}$$
    API trả về mã **`HTTP 409 Conflict`** khi phát hiện trùng lịch của nhân viên.
 3. **Quy tắc hủy lịch**: Khi hủy bắt buộc phải nhập lý do (`CancellationReason`), giải phóng khung giờ, không được hủy lịch đã diễn ra hoặc đã hoàn thành.
+
+---
+
+## 8. Hướng dẫn chạy kiểm thử tự động (Automated Test Cases)
+
+Hệ thống cung cấp script PowerShell tự động kiểm thử toàn bộ các kịch bản nghiệp vụ bắt buộc (từ TC1 đến TC6 theo yêu cầu đề bài):
+* **TC1**: Chặn đặt lịch trong quá khứ (`StartTime > DateTime.UtcNow`).
+* **TC2**: Chặn đặt lịch ngoài giờ làm việc của nhân viên.
+* **TC3**: Chặn hai đơn trùng khung giờ cùng một nhân viên (`HTTP 409 Conflict`).
+* **TC4**: Khách hàng không xem được thông tin đặt lịch của khách hàng khác.
+* **TC5**: Khách hàng không có quyền tự chuyển trạng thái hoàn thành dịch vụ (`HTTP 403 Forbidden`).
+* **TC6**: Chặn không cho phép hủy lịch hẹn đã hoàn thành.
+
+### Các bước thực hiện:
+
+#### Bước 1: Khởi động Backend API
+Mở cửa sổ Terminal tại thư mục dự án và chạy Backend API lắng nghe tại cổng `http://localhost:5000`:
+```bash
+cd ServiceBooking.Api
+dotnet run --urls="http://localhost:5000"
+```
+
+#### Bước 2: Chạy Script kiểm thử tự động
+Mở một cửa sổ Terminal khác (PowerShell) tại thư mục gốc dự án (`INCOTRADE`) và thực thi lệnh:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\test_all_cases.ps1
+```
+*(Script sẽ tự động đăng nhập các tài khoản mẫu, chuẩn bị dữ liệu kiểm thử và lần lượt kích hoạt các API kịch bản).*
+
