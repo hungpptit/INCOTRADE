@@ -43,7 +43,15 @@ public class BookingService : IBookingService
             throw new BadRequestException("Nhân viên này hiện đang ngừng hoạt động.");
         }
 
-        // 3. Lấy danh sách ca làm việc của thợ trong ngày
+        // 3. Kiểm tra ngày đặt lịch nằm trong giới hạn 7 ngày mở lịch
+        var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
+        var maxAllowedDate = todayUtc.AddDays(6);
+        if (parameters.Date > maxAllowedDate)
+        {
+            throw new BadRequestException("Hệ thống chỉ mở lịch đặt trước tối đa trong vòng 7 ngày tới.");
+        }
+
+        // 4. Lấy danh sách ca làm việc của thợ trong ngày
         var shifts = await _context.WorkSchedules
             .AsNoTracking()
             .Where(ws => ws.StaffId == parameters.StaffId && ws.WorkDate == parameters.Date)
@@ -149,8 +157,16 @@ public class BookingService : IBookingService
             throw new BadRequestException("Không thể đặt lịch với nhân viên đang bị khóa.");
         }
 
-        // 6. Kiểm tra booking phải nằm hoàn toàn trong ca làm việc của thợ (TC2)
+        // 6. Kiểm tra ngày đặt lịch không vượt quá 7 ngày mở lịch
         var bookingDate = DateOnly.FromDateTime(startTimeUtc);
+        var todayBookingDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        var maxBookingDate = todayBookingDate.AddDays(6);
+        if (bookingDate > maxBookingDate)
+        {
+            throw new BadRequestException("Hệ thống chỉ mở lịch đặt trước tối đa trong vòng 7 ngày tới.");
+        }
+
+        // 7. Kiểm tra booking phải nằm hoàn toàn trong ca làm việc của thợ (TC2)
         var bookingStartTime = TimeOnly.FromDateTime(startTimeUtc).ToTimeSpan();
         var bookingEndTime = TimeOnly.FromDateTime(endTimeUtc).ToTimeSpan();
 
@@ -243,6 +259,15 @@ public class BookingService : IBookingService
             .Include(b => b.Staff)
             .Where(b => b.CustomerId == customerId);
 
+        // 1. Lọc theo ngày hẹn
+        if (parameters.Date.HasValue)
+        {
+            var dayStartUtc = parameters.Date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var dayEndUtc = parameters.Date.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            query = query.Where(b => b.StartTime < dayEndUtc && b.EndTime > dayStartUtc);
+        }
+
+        // 2. Lọc theo trạng thái
         if (!string.IsNullOrWhiteSpace(parameters.Status))
         {
             query = query.Where(b => b.Status == parameters.Status.Trim());

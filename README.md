@@ -54,52 +54,98 @@ Sau khi khởi động thành công:
 
 ---
 
-### Bước 2: Khởi chạy Backend Web API
+### Bước 2: Khởi chạy Backend Web API (.NET 7)
 
-Mở terminal tại thư mục gốc và chạy:
+Backend API phục vụ toàn bộ nghiệp vụ và kết nối với Frontend qua cổng chuẩn **`http://localhost:5000`**.
 
-```bash
-cd ServiceBooking.Api
-dotnet run
-```
+* **Thư mục làm việc:** Đứng tại thư mục gốc `INCOTRADE`, di chuyển vào thư mục `ServiceBooking.Api`:
+  ```bash
+  cd ServiceBooking.Api
+  ```
+* **Lệnh khởi chạy:**
+  ```bash
+  dotnet run --urls="http://localhost:5000"
+  ```
+  *(Hoặc đứng tại thư mục gốc `INCOTRADE` và chạy: `dotnet run --project ServiceBooking.Api --urls="http://localhost:5000"`)*
 
-* Backend sẽ **tự động áp dụng Migration và tự động Seed Data mẫu** vào PostgreSQL ngay lần đầu khởi chạy.
-* **Swagger UI API Documentation**: Mở trình duyệt truy cập: **`http://localhost:5129/swagger`** (hoặc port được thông báo trên terminal).
+> [!NOTE]
+> * **Tự động cấu hình CSDL:** Ngay khi khởi chạy, Backend đã tích hợp sẵn cơ chế **tự động áp dụng Migration và tự động nạp Seed Data mẫu** vào PostgreSQL (tự tính lịch 7 ngày tới và các đơn mẫu). Bạn **không bắt buộc** phải chạy lệnh migration thủ công.
+> * **Swagger UI API Documentation:** Truy cập trực tiếp tại: **[http://localhost:5000/swagger](http://localhost:5000/swagger)**.
 
 ---
 
-### Bước 3: Khởi chạy Frontend (Next.js)
+### Bước 3: Khởi chạy Frontend (Next.js App Router)
 
-Mở một cửa sổ terminal mới và chạy:
+Frontend giao diện người dùng và quản trị viên chạy trên cổng **`http://localhost:3000`** và tự động kết nối với Backend API tại cổng `http://localhost:5000`.
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+* **Thư mục làm việc:** Mở một cửa sổ terminal mới, đứng tại thư mục gốc `INCOTRADE` và di chuyển vào thư mục `frontend`:
+  ```bash
+  cd frontend
+  ```
 
-* Mở trình duyệt truy cập giao diện: **[http://localhost:3000](http://localhost:3000)**
+* **Cài đặt thư viện dependencies (chỉ cần chạy lần đầu):**
+  ```bash
+  npm install
+  ```
+
+* **Lựa chọn 1 trong 2 chế độ chạy:**
+  * **Cách A - Chế độ Phát triển (Development - Hot Reload):**
+    ```bash
+    npm run dev
+    ```
+    Phù hợp khi cần vừa xem vừa chỉnh sửa code.
+  * **Cách B - Chế độ Production (Đã build tối ưu, tải trang siêu tốc):**
+    ```bash
+    npm run build
+    npm run start
+    ```
+    *(Hoặc: `npx next start -p 3000`)*
+
+* **Truy cập ứng dụng:** Mở trình duyệt tại **[http://localhost:3000](http://localhost:3000)**.
+  - Khách hàng đăng nhập: `/login` $\rightarrow$ Đặt lịch: `/booking` $\rightarrow$ Lịch cá nhân: `/my-bookings`.
+  - Quản trị viên đăng nhập: `/login` (tài khoản Admin) $\rightarrow$ Quản trị lịch hẹn: `/admin/bookings` $\rightarrow$ Quản lý ca trực: `/admin/schedules` $\rightarrow$ Dịch vụ: `/admin/services`.
 
 ---
 
 ## 5. Migration & SQL Script (Cơ sở dữ liệu)
 
-Hệ thống hỗ trợ 2 phương án khởi tạo CSDL:
+> [!TIP]
+> **Khuyên dùng:** Backend đã được lập trình để **tự động chạy Migration và Seed Data** mỗi khi khởi động `dotnet run`. Nếu bạn muốn chủ động tạo lại CSDL từ đầu hoặc chạy thủ công, hãy chọn 1 trong 2 cách dưới đây.
 
-### Cách 1: Sử dụng EF Core Migration (Khuyên dùng)
-Backend đã cấu hình tự động chạy migration khi khởi động. Hoặc bạn có thể chạy thủ công bằng lệnh:
-```bash
-dotnet ef database update --project ServiceBooking.Api
-```
+### Cách 1: Sử dụng EF Core Migration CLI
 
-### Cách 2: Sử dụng file SQL Script trực tiếp
-Nếu không sử dụng EF Core CLI, bạn có thể chạy trực tiếp file SQL đã được xuất sẵn tại thư mục gốc:
-* File script: **`database_init.sql`**
-* Cách chạy vào PostgreSQL bằng command line:
+Tùy thuộc vào thư mục bạn đang mở trong Terminal, hãy chạy lệnh tương ứng:
+
+* **Trường hợp 1: Nếu Terminal đang đứng tại thư mục gốc dự án (`INCOTRADE/`):**
   ```bash
+  # Đứng tại: d:\INCOTRADE
+  dotnet ef database update --project ServiceBooking.Api
+  ```
+
+* **Trường hợp 2: Nếu Terminal đang đứng bên trong thư mục `ServiceBooking.Api/`:**
+  ```bash
+  # Đứng tại: d:\INCOTRADE\ServiceBooking.Api
+  dotnet ef database update
+  ```
+
+*(Yêu cầu máy đã cài công cụ EF CLI: `dotnet tool install --global dotnet-ef`)*
+
+---
+
+### Cách 2: Sử dụng file SQL Script trực tiếp (`database_init.sql`)
+
+Nếu máy không cài đặt `dotnet-ef` hoặc bạn muốn chạy trực tiếp bằng câu lệnh SQL thuần vào container PostgreSQL:
+
+* **File script:** File `database_init.sql` nằm ngay tại **thư mục gốc của dự án (`INCOTRADE/database_init.sql`)**.
+* **Thực thi qua Docker CLI:** Đứng tại **thư mục gốc dự án (`INCOTRADE/`)** và chạy:
+  ```bash
+  # Đứng tại thư mục gốc: d:\INCOTRADE
   docker exec -i incotrade_postgres psql -U postgres -d booking_db < database_init.sql
   ```
-  *(Hoặc mở file `database_init.sql`, copy toàn bộ nội dung và dán vào ô Query của **pgweb** tại `http://localhost:8081` rồi nhấn Run Query).*
+* **Hoặc thực thi qua giao diện web `pgweb` (Cực kỳ đơn giản):**
+  1. Mở trình duyệt truy cập: **[http://localhost:8081](http://localhost:8081)**.
+  2. Mở file `database_init.sql` bằng VS Code / Notepad, copy toàn bộ nội dung.
+  3. Dán vào khung **SQL Query** của pgweb và bấm **Execute / Run Query**.
 
 ---
 
