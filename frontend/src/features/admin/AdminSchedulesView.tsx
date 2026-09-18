@@ -8,6 +8,7 @@ import { formatDate } from '@/utils/formatters';
 import { Button } from '@/components/common/Button/Button';
 import { Modal } from '@/components/common/Modal/Modal';
 import { ConflictAlert, EmptyState, ErrorAlert, LoadingSkeleton } from '@/components/common/Feedback/StateFeedback';
+import { PaginationControls } from '@/components/common/Pagination/PaginationControls';
 
 // Zod Schema for WorkShift
 const shiftSchema = z
@@ -29,6 +30,17 @@ export function AdminSchedulesView() {
   const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Pagination State (8 ca trực / trang)
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 8;
+  const totalCount = schedules.length;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+  const validPage = Math.min(currentPage, totalPages);
+  const paginatedSchedules = schedules.slice(
+    (validPage - 1) * PAGE_SIZE,
+    validPage * PAGE_SIZE
+  );
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -181,15 +193,25 @@ export function AdminSchedulesView() {
           flexWrap: 'wrap',
         }}
       >
-        <label htmlFor="staffSelect" style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--color-primary)' }}>
-          👤 Chọn Nhân viên:
+        <label
+          htmlFor="staffSelect"
+          className="form-label"
+          style={{ fontWeight: 700, fontSize: '1.02rem', color: 'var(--color-primary)', margin: 0 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+            person
+          </span>
+          <span>Chọn Nhân viên:</span>
         </label>
         <select
           id="staffSelect"
           className="form-select"
           style={{ maxWidth: '300px', fontWeight: 600 }}
           value={selectedStaffId}
-          onChange={(e) => setSelectedStaffId(e.target.value)}
+          onChange={(e) => {
+            setSelectedStaffId(e.target.value);
+            setCurrentPage(1);
+          }}
         >
           {staffs.map((s) => (
             <option key={s.id} value={s.id}>
@@ -217,7 +239,8 @@ export function AdminSchedulesView() {
           }
         />
       ) : (
-        <div className="table-card">
+        <>
+          <div className="table-card">
           <div className="table-responsive">
             <table className="aura-table">
               <thead>
@@ -230,7 +253,7 @@ export function AdminSchedulesView() {
                 </tr>
               </thead>
               <tbody>
-                {schedules.map((item) => (
+                {paginatedSchedules.map((item) => (
                   <tr key={item.id}>
                     <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -266,7 +289,17 @@ export function AdminSchedulesView() {
             </table>
           </div>
         </div>
-      )}
+
+        {/* Pagination Controls */}
+        <PaginationControls
+          currentPage={validPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          onPageChange={(page) => setCurrentPage(page)}
+          isLoading={isLoading}
+        />
+      </>
+    )}
 
       {/* Modal Add Shift */}
       <Modal

@@ -168,8 +168,16 @@ export function AdminBookingsView() {
           </p>
         </div>
 
-        <Button variant="outline" size="md" onClick={handleResetFilters}>
-          🔄 Xóa bộ lọc
+        <Button
+          variant="outline"
+          size="md"
+          onClick={handleResetFilters}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            restart_alt
+          </span>
+          <span>Xóa bộ lọc</span>
         </Button>
       </div>
 
@@ -188,8 +196,9 @@ export function AdminBookingsView() {
       >
         {/* Search */}
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label" style={{ fontSize: '0.9rem' }}>
-            🔍 Tìm khách / Mã đơn:
+          <label className="form-label" style={{ fontSize: '0.88rem' }}>
+            <span className="material-symbols-outlined">search</span>
+            <span>Tìm khách / Mã đơn:</span>
           </label>
           <input
             type="text"
@@ -205,8 +214,9 @@ export function AdminBookingsView() {
 
         {/* Date Filter */}
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label" style={{ fontSize: '0.9rem' }}>
-            📅 Lọc theo ngày:
+          <label className="form-label" style={{ fontSize: '0.88rem' }}>
+            <span className="material-symbols-outlined">calendar_today</span>
+            <span>Lọc theo ngày:</span>
           </label>
           <input
             type="date"
@@ -221,8 +231,9 @@ export function AdminBookingsView() {
 
         {/* Status Filter */}
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label" style={{ fontSize: '0.9rem' }}>
-            Trạng thái:
+          <label className="form-label" style={{ fontSize: '0.88rem' }}>
+            <span className="material-symbols-outlined">tune</span>
+            <span>Trạng thái:</span>
           </label>
           <select
             className="form-select"
@@ -232,7 +243,7 @@ export function AdminBookingsView() {
               setCurrentPage(1);
             }}
           >
-            <option value="">— Tất cả trạng thái —</option>
+            <option value="">Tất cả trạng thái</option>
             <option value="Pending">Chờ duyệt (Pending)</option>
             <option value="Confirmed">Đã duyệt (Confirmed)</option>
             <option value="Completed">Đã hoàn thành (Completed)</option>
@@ -242,8 +253,9 @@ export function AdminBookingsView() {
 
         {/* Staff Filter */}
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label" style={{ fontSize: '0.9rem' }}>
-            Chuyên viên phục vụ:
+          <label className="form-label" style={{ fontSize: '0.88rem' }}>
+            <span className="material-symbols-outlined">person</span>
+            <span>Chuyên viên phục vụ:</span>
           </label>
           <select
             className="form-select"
@@ -253,7 +265,7 @@ export function AdminBookingsView() {
               setCurrentPage(1);
             }}
           >
-            <option value="">— Tất cả chuyên viên —</option>
+            <option value="">Tất cả chuyên viên</option>
             {staffs.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.fullName}
@@ -355,7 +367,15 @@ export function AdminBookingsView() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <span className="service-price-pill">{formatCurrency(item.servicePrice)}</span>
-                          <span className="service-duration-hint">⏱ {item.durationMinutes} phút</span>
+                          <span
+                            className="service-duration-hint"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                              schedule
+                            </span>
+                            <span>{item.durationMinutes} phút</span>
+                          </span>
                         </div>
                       </td>
 

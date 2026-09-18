@@ -79,6 +79,9 @@ public class BookingService : IBookingService
         var duration = TimeSpan.FromMinutes(service.DurationMinutes);
         var nowUtc = DateTime.UtcNow;
 
+        var lunchStart = new TimeSpan(12, 30, 0);
+        var lunchEnd = new TimeSpan(13, 30, 0);
+
         // 5. Chia ca làm việc thành các slot giờ bằng thời lượng dịch vụ
         foreach (var shift in shifts)
         {
@@ -87,6 +90,13 @@ public class BookingService : IBookingService
             while (currentSlotStart + duration <= shift.EndTime)
             {
                 var currentSlotEnd = currentSlotStart + duration;
+
+                // Tự động bỏ qua khung giờ nghỉ trưa (12:30 - 13:30)
+                if (currentSlotStart < lunchEnd && currentSlotEnd > lunchStart)
+                {
+                    currentSlotStart = currentSlotEnd;
+                    continue;
+                }
 
                 var slotStartUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotStart), DateTimeKind.Utc);
                 var slotEndUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotEnd), DateTimeKind.Utc);
@@ -98,15 +108,13 @@ public class BookingService : IBookingService
                     // Slot trùng khi: slotStart < existingEnd AND slotEnd > existingStart
                     var hasConflict = existingBookings.Any(b => slotStartUtc < b.EndTime && slotEndUtc > b.StartTime);
 
-                    if (!hasConflict)
+                    availableSlots.Add(new AvailableSlotDto
                     {
-                        availableSlots.Add(new AvailableSlotDto
-                        {
-                            StartTime = slotStartUtc,
-                            EndTime = slotEndUtc,
-                            FormattedTime = $"{currentSlotStart:hh\\:mm} - {currentSlotEnd:hh\\:mm}"
-                        });
-                    }
+                        StartTime = slotStartUtc,
+                        EndTime = slotEndUtc,
+                        FormattedTime = $"{currentSlotStart:hh\\:mm} - {currentSlotEnd:hh\\:mm}",
+                        IsAvailable = !hasConflict
+                    });
                 }
 
                 currentSlotStart = currentSlotEnd;
@@ -166,9 +174,18 @@ public class BookingService : IBookingService
             throw new BadRequestException("Hệ thống chỉ mở lịch đặt trước tối đa trong vòng 7 ngày tới.");
         }
 
-        // 7. Kiểm tra booking phải nằm hoàn toàn trong ca làm việc của thợ (TC2)
+        // 7. Kiểm tra booking không nằm trong giờ nghỉ trưa (12:30 - 13:30)
+        var lunchStart = new TimeSpan(12, 30, 0);
+        var lunchEnd = new TimeSpan(13, 30, 0);
         var bookingStartTime = TimeOnly.FromDateTime(startTimeUtc).ToTimeSpan();
         var bookingEndTime = TimeOnly.FromDateTime(endTimeUtc).ToTimeSpan();
+
+        if (bookingStartTime < lunchEnd && bookingEndTime > lunchStart)
+        {
+            throw new BadRequestException("Khung giờ bạn chọn rơi vào thời gian nghỉ trưa (12:30 - 13:30) của cửa hàng.");
+        }
+
+        // 8. Kiểm tra booking phải nằm hoàn toàn trong ca làm việc của thợ (TC2)
 
         var isWithinShift = await _context.WorkSchedules
             .AsNoTracking()
@@ -275,9 +292,15 @@ public class BookingService : IBookingService
 
         var totalItems = await query.CountAsync();
 
+        // 3. Sắp xếp linh hoạt theo tiêu chí SortBy (mặc định là mới đặt nhất)
+        query = parameters.SortBy?.ToLowerInvariant() switch
+        {
+            "starttimeasc" => query.OrderBy(b => b.StartTime).ThenBy(b => b.Id),
+            "starttimedesc" => query.OrderByDescending(b => b.StartTime).ThenBy(b => b.Id),
+            _ => query.OrderByDescending(b => b.CreatedAt).ThenBy(b => b.Id)
+        };
+
         var items = await query
-            .OrderByDescending(b => b.StartTime)
-            .ThenBy(b => b.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .Select(b => new BookingDto

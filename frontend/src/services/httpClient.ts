@@ -91,6 +91,8 @@ export async function httpClient<T>(
       // Phân loại mã lỗi theo quy tắc Rule 2
       if (response.status === 409) {
         errorMessage = errorDetails?.detail || 'Khung giờ này vừa có người đặt trước. Quý khách vui lòng chọn khung giờ khác.';
+      } else if (response.status === 429) {
+        errorMessage = errorDetails?.detail || 'Bạn đang thao tác quá nhanh. Vui lòng đợi trong giây lát rồi thử lại.';
       } else if (response.status === 401) {
         errorMessage = 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.';
       } else if (response.status === 403) {

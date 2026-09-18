@@ -15,6 +15,8 @@ import { ConflictAlert, ErrorAlert } from '@/components/common/Feedback/StateFee
 import { Modal } from '@/components/common/Modal/Modal';
 import { Button } from '@/components/common/Button/Button';
 import { formatCurrency, formatDate, formatDateTime, formatTime } from '@/utils/formatters';
+import { authService } from '@/services/authService';
+import { BookingLoginModal } from './BookingLoginModal';
 
 interface BookingWizardProps {
   services: Service[];
@@ -51,6 +53,48 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  // Phục hồi Draft Booking khi load trang (nếu người dùng vừa chuyển trang login quay lại)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedDraft = sessionStorage.getItem('aura_draft_booking');
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.serviceId) {
+          const s = services.find((srv) => srv.id === parsed.serviceId);
+          if (s) setSelectedService(s);
+        }
+        if (parsed.staffId) {
+          const st = staffs.find((stf) => stf.id === parsed.staffId);
+          if (st) setSelectedStaff(st);
+        }
+        if (parsed.date) setSelectedDate(parsed.date);
+        if (parsed.slot) setSelectedSlot(parsed.slot);
+        if (parsed.customerNote) setCustomerNote(parsed.customerNote);
+        if (parsed.step && parsed.step > 1) setCurrentStep(parsed.step);
+      }
+    } catch {
+      // Bỏ qua nếu dữ liệu nháp không hợp lệ
+    }
+  }, [services, staffs]);
+
+  // Tự động lưu tiến trình booking vào sessionStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (selectedService || selectedStaff || selectedSlot) {
+      const draft = {
+        serviceId: selectedService?.id,
+        staffId: selectedStaff?.id,
+        date: selectedDate,
+        slot: selectedSlot,
+        customerNote,
+        step: currentStep,
+      };
+      sessionStorage.setItem('aura_draft_booking', JSON.stringify(draft));
+    }
+  }, [selectedService, selectedStaff, selectedDate, selectedSlot, customerNote, currentStep]);
 
   // Function to fetch slots
   const fetchSlots = useCallback(async () => {
@@ -111,6 +155,13 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
       return;
     }
 
+    // 1. Kiểm tra phiên đăng nhập của người dùng trước khi gửi request
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
     setIsSubmitting(true);
     setConflictError(null);
     setGeneralError(null);
@@ -123,9 +174,19 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
         customerNote: customerNote.trim() || undefined,
       });
 
+      // Tạo thành công -> dọn dẹp bản nháp trong sessionStorage
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('aura_draft_booking');
+      }
+
       setCreatedBooking(created);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
+        if (err.status === 401) {
+          // Phiên hết hạn hoặc chưa đăng nhập -> mở Modal đăng nhập ngay tại chỗ
+          setIsLoginModalOpen(true);
+          return;
+        }
         if (err.status === 409) {
           setConflictError(
             err.message ||
@@ -143,6 +204,16 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Callback sau khi đăng nhập thành công từ Modal
+  const handleLoginSuccess = () => {
+    setIsLoginModalOpen(false);
+    setGeneralError(null);
+    // Tự động gọi tiếp hàm tạo booking với các dữ liệu đã chọn
+    setTimeout(() => {
+      handleSubmitBooking();
+    }, 150);
   };
 
   const handleReset = () => {
@@ -291,7 +362,41 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
       )}
 
       {/* General Error Alert */}
-      {generalError && <ErrorAlert message={generalError} />}
+      {generalError && (
+        <div
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            backgroundColor: '#fff1f2',
+            border: '1px solid #fecdd3',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#9f1239', fontSize: '0.95rem' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+              error
+            </span>
+            <span>{generalError}</span>
+          </div>
+          {(!authService.getCurrentUser() || generalError.toLowerCase().includes('đăng nhập')) && (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setIsLoginModalOpen(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                login
+              </span>
+              <span>Đăng nhập ngay</span>
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Side-by-Side 2-Column Responsive Layout */}
       <div
@@ -595,6 +700,13 @@ export function BookingWizard({ services, staffs, initialServiceId }: BookingWiz
           </div>
         </Modal>
       )}
+
+      {/* In-Place Quick Login Modal */}
+      <BookingLoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSuccess={handleLoginSuccess}
+      />
 
       <style>{`
         @media (min-width: 1024px) {

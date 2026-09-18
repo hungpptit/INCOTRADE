@@ -3,6 +3,7 @@ export type BookingStatus = 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
 export interface AvailableSlot {
   startTime: string;   // ISO UTC format
   endTime: string;     // ISO UTC format
+  isAvailable?: boolean;
 }
 
 export interface AvailableSlotsQueryParameters {
@@ -61,4 +62,5 @@ export interface MyBookingQueryParameters {
   status?: BookingStatus;
   page?: number;
   pageSize?: number;
+  sortBy?: 'Newest' | 'StartTimeAsc' | 'StartTimeDesc';
 }

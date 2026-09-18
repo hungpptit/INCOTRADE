@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ServiceBooking.Api.DTOs.Bookings;
 using ServiceBooking.Api.DTOs.Common;
 using ServiceBooking.Api.Exceptions;
@@ -23,6 +24,7 @@ public class BookingsController : ControllerBase
     /// Tính toán các khung giờ còn trống của nhân viên cho dịch vụ cụ thể
     /// </summary>
     [HttpGet("available-slots")]
+    [EnableRateLimiting("BookingRatePolicy")]
     public async Task<ActionResult<List<AvailableSlotDto>>> GetAvailableSlots([FromQuery] AvailableSlotsQueryParameters parameters)
     {
         var result = await _bookingService.GetAvailableSlotsAsync(parameters);
@@ -34,6 +36,7 @@ public class BookingsController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize(Roles = "Customer")]
+    [EnableRateLimiting("BookingRatePolicy")]
     public async Task<ActionResult<BookingDto>> CreateBooking([FromBody] CreateBookingRequest request)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier)

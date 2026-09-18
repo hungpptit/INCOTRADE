@@ -41,15 +41,16 @@ export function SlotStep({
     });
   }
 
+  // Helper to extract the actual hour of slot without timezone shift
+  const getSlotHour = (isoString: string): number => {
+    const formatted = formatTime(isoString);
+    const hourPart = parseInt(formatted.split(':')[0], 10);
+    return isNaN(hourPart) ? 12 : hourPart;
+  };
+
   // Partition slots into Morning (before 12:00) and Afternoon/Evening (12:00 onwards)
-  const morningSlots = slots.filter((s) => {
-    const hour = new Date(s.startTime).getHours();
-    return hour < 12;
-  });
-  const afternoonSlots = slots.filter((s) => {
-    const hour = new Date(s.startTime).getHours();
-    return hour >= 12;
-  });
+  const morningSlots = slots.filter((s) => getSlotHour(s.startTime) < 12);
+  const afternoonSlots = slots.filter((s) => getSlotHour(s.startTime) >= 12);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -68,14 +69,18 @@ export function SlotStep({
         </div>
 
         {/* Legend */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', color: 'var(--color-text-subtle)' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.8rem', color: 'var(--color-text-subtle)' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--color-secondary)' }} />
             Đang chọn
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#cbd5e1' }} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ffffff', border: '1px solid var(--color-border)' }} />
             Còn trống
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#f1f5f9', border: '1px dashed #cbd5e1' }} />
+            Đã kín
           </span>
         </div>
       </div>
@@ -222,11 +227,13 @@ export function SlotStep({
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                   {morningSlots.map((slot, index) => {
                     const isSelected = selectedSlot?.startTime === slot.startTime;
+                    const isBooked = slot.isAvailable === false;
                     return (
                       <button
                         key={index}
                         type="button"
-                        onClick={() => onSelectSlot(slot)}
+                        disabled={isBooked}
+                        onClick={() => !isBooked && onSelectSlot(slot)}
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
@@ -234,16 +241,34 @@ export function SlotStep({
                           justifyContent: 'center',
                           padding: '10px 8px',
                           borderRadius: 'var(--radius-md)',
-                          border: isSelected ? '2px solid var(--color-secondary)' : '1px solid var(--color-border)',
-                          backgroundColor: isSelected ? 'var(--color-secondary)' : 'var(--color-surface-lowest)',
-                          color: isSelected ? '#ffffff' : 'var(--color-text-main)',
-                          cursor: 'pointer',
+                          border: isBooked
+                            ? '1px dashed var(--color-border)'
+                            : isSelected
+                            ? '2px solid var(--color-secondary)'
+                            : '1px solid var(--color-border)',
+                          backgroundColor: isBooked
+                            ? '#f8fafc'
+                            : isSelected
+                            ? 'var(--color-secondary)'
+                            : 'var(--color-surface-lowest)',
+                          color: isBooked
+                            ? 'var(--color-outline-variant)'
+                            : isSelected
+                            ? '#ffffff'
+                            : 'var(--color-text-main)',
+                          cursor: isBooked ? 'not-allowed' : 'pointer',
+                          opacity: isBooked ? 0.75 : 1,
                           transition: 'all 0.15s ease',
                           boxShadow: isSelected ? '0 4px 12px rgba(0, 108, 73, 0.25)' : 'var(--shadow-sm)',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '1.05rem', fontWeight: 800 }}>
+                          <span
+                            style={{
+                              fontSize: '1.05rem',
+                              fontWeight: 800,
+                            }}
+                          >
                             {formatTime(slot.startTime)}
                           </span>
                           {isSelected && (
@@ -253,7 +278,7 @@ export function SlotStep({
                           )}
                         </div>
                         <span style={{ fontSize: '0.74rem', opacity: isSelected ? 0.9 : 0.65 }}>
-                          đến {formatTime(slot.endTime)}
+                          {isBooked ? 'Đã có khách' : `đến ${formatTime(slot.endTime)}`}
                         </span>
                       </button>
                     );
@@ -286,11 +311,13 @@ export function SlotStep({
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
                   {afternoonSlots.map((slot, index) => {
                     const isSelected = selectedSlot?.startTime === slot.startTime;
+                    const isBooked = slot.isAvailable === false;
                     return (
                       <button
                         key={index}
                         type="button"
-                        onClick={() => onSelectSlot(slot)}
+                        disabled={isBooked}
+                        onClick={() => !isBooked && onSelectSlot(slot)}
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
@@ -298,16 +325,34 @@ export function SlotStep({
                           justifyContent: 'center',
                           padding: '10px 8px',
                           borderRadius: 'var(--radius-md)',
-                          border: isSelected ? '2px solid var(--color-secondary)' : '1px solid var(--color-border)',
-                          backgroundColor: isSelected ? 'var(--color-secondary)' : 'var(--color-surface-lowest)',
-                          color: isSelected ? '#ffffff' : 'var(--color-text-main)',
-                          cursor: 'pointer',
+                          border: isBooked
+                            ? '1px dashed var(--color-border)'
+                            : isSelected
+                            ? '2px solid var(--color-secondary)'
+                            : '1px solid var(--color-border)',
+                          backgroundColor: isBooked
+                            ? '#f8fafc'
+                            : isSelected
+                            ? 'var(--color-secondary)'
+                            : 'var(--color-surface-lowest)',
+                          color: isBooked
+                            ? 'var(--color-outline-variant)'
+                            : isSelected
+                            ? '#ffffff'
+                            : 'var(--color-text-main)',
+                          cursor: isBooked ? 'not-allowed' : 'pointer',
+                          opacity: isBooked ? 0.75 : 1,
                           transition: 'all 0.15s ease',
                           boxShadow: isSelected ? '0 4px 12px rgba(0, 108, 73, 0.25)' : 'var(--shadow-sm)',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '1.05rem', fontWeight: 800 }}>
+                          <span
+                            style={{
+                              fontSize: '1.05rem',
+                              fontWeight: 800,
+                            }}
+                          >
                             {formatTime(slot.startTime)}
                           </span>
                           {isSelected && (
@@ -317,7 +362,7 @@ export function SlotStep({
                           )}
                         </div>
                         <span style={{ fontSize: '0.74rem', opacity: isSelected ? 0.9 : 0.65 }}>
-                          đến {formatTime(slot.endTime)}
+                          {isBooked ? 'Đã có khách' : `đến ${formatTime(slot.endTime)}`}
                         </span>
                       </button>
                     );

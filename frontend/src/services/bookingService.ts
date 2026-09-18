@@ -50,6 +50,7 @@ export const bookingService = {
     if (params?.status) query.append('status', params.status);
     if (params?.page) query.append('page', String(params.page));
     if (params?.pageSize) query.append('pageSize', String(params.pageSize));
+    if (params?.sortBy) query.append('sortBy', params.sortBy);
 
     const qs = query.toString();
     return httpClient<PagedResult<Booking>>(`/api/bookings/my-bookings${qs ? `?${qs}` : ''}`, {}, token);

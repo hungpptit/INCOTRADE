@@ -23,21 +23,31 @@ export function formatDate(isoString?: string | null): string {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: 'UTC',
   }).format(date);
 }
 
 /**
  * Format chuỗi ISO DateTime thành giờ:phút
  * Ví dụ: "2026-09-25T09:30:00Z" -> "09:30"
+ *        "14:30:00" -> "14:30"
  */
 export function formatTime(isoString?: string | null): string {
   if (!isoString) return '';
+  if (isoString.includes('T')) {
+    const timePart = isoString.split('T')[1];
+    return timePart.substring(0, 5);
+  }
+  if (isoString.includes(':')) {
+    return isoString.substring(0, 5);
+  }
   const date = new Date(isoString);
   if (isNaN(date.getTime())) return isoString;
   return new Intl.DateTimeFormat('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
+    timeZone: 'UTC',
   }).format(date);
 }
 

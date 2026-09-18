@@ -12,4 +12,9 @@ public class MyBookingQueryParameters
 
     [Range(1, 100, ErrorMessage = "PageSize phải từ 1 đến 100.")]
     public int PageSize { get; set; } = 10;
+
+    /// <summary>
+    /// Tiêu chí sắp xếp: "Newest" (mới đặt - mặc định), "StartTimeAsc" (ngày hẹn sớm nhất), "StartTimeDesc" (ngày hẹn muộn nhất)
+    /// </summary>
+    public string? SortBy { get; set; } = "Newest";
 }

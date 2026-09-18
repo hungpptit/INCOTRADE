@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Booking, BookingStatus } from '@/types/booking';
 import { bookingService } from '@/services/bookingService';
 import { authService } from '@/services/authService';
+import { User } from '@/types/auth';
 import { canCancelBooking } from '@/utils/statusPredicates';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
 import { StatusBadge } from '@/components/common/Badge/StatusBadge';
@@ -22,11 +23,13 @@ const cancelSchema = z.object({
 
 export function MyBookingsView() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isClientReady, setIsClientReady] = useState(false);
 
   // Filters & Pagination
   const [selectedStatus, setSelectedStatus] = useState<BookingStatus | 'ALL'>('ALL');
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'Newest' | 'StartTimeAsc' | 'StartTimeDesc'>('Newest');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(5);
 
@@ -52,6 +55,7 @@ export function MyBookingsView() {
       const res = await bookingService.getMyBookings({
         date: selectedDate || undefined,
         status: selectedStatus === 'ALL' ? undefined : selectedStatus,
+        sortBy,
         page: currentPage,
         pageSize,
       });
@@ -68,9 +72,10 @@ export function MyBookingsView() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDate, selectedStatus, currentPage, pageSize]);
+  }, [selectedDate, selectedStatus, sortBy, currentPage, pageSize]);
 
   useEffect(() => {
+    setIsClientReady(true);
     const u = authService.getCurrentUser();
     setCurrentUser(u);
     if (!u) {
@@ -114,11 +119,20 @@ export function MyBookingsView() {
     }
   };
 
+  // Waiting for client mount to avoid SSR hydration mismatch
+  if (!isClientReady) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px 0' }}>
+        <LoadingSkeleton count={3} type="table-row" />
+      </div>
+    );
+  }
+
   // Not logged in State
   if (!currentUser) {
     return (
       <EmptyState
-        icon="🔐"
+        icon="lock"
         title="Vui lòng đăng nhập để xem lịch hẹn"
         description="Quý khách cần đăng nhập tài khoản Khách hàng để theo dõi danh sách lịch hẹn cá nhân."
         action={
@@ -236,15 +250,53 @@ export function MyBookingsView() {
             })}
           </div>
 
-          {/* Date Picker Filter */}
+          {/* Sort Dropdown + Date Picker Filter */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
+              gap: '12px',
               flexWrap: 'wrap',
             }}
           >
+            {/* Sort Select */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: '1.25rem', color: 'var(--color-primary)' }}
+                title="Sắp xếp danh sách"
+              >
+                sort
+              </span>
+              <select
+                className="form-select"
+                style={{
+                  minWidth: '185px',
+                  padding: '8px 36px 8px 12px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--color-bg)',
+                }}
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as 'Newest' | 'StartTimeAsc' | 'StartTimeDesc');
+                  setCurrentPage(1);
+                }}
+                aria-label="Sắp xếp danh sách lịch hẹn"
+              >
+                <option value="Newest">Mới đặt nhất</option>
+                <option value="StartTimeAsc">Ngày hẹn sớm nhất</option>
+                <option value="StartTimeDesc">Ngày hẹn muộn nhất</option>
+              </select>
+            </div>
+
+            {/* Date Picker Filter */}
             <div
               style={{
                 display: 'flex',
@@ -304,10 +356,16 @@ export function MyBookingsView() {
                   fontSize: '0.85rem',
                   color: 'var(--color-danger, #c0392b)',
                   borderColor: 'rgba(192, 57, 43, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
                 }}
                 title="Bỏ lọc ngày này"
               >
-                ✕ Bỏ lọc ngày
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  close
+                </span>
+                <span>Bỏ lọc ngày</span>
               </button>
             )}
           </div>
@@ -352,6 +410,7 @@ export function MyBookingsView() {
               onClick={() => {
                 setSelectedStatus('ALL');
                 setSelectedDate('');
+                setSortBy('Newest');
                 setCurrentPage(1);
               }}
               style={{
@@ -574,7 +633,7 @@ export function MyBookingsView() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <p style={{ fontSize: '1rem', color: 'var(--color-text-main)', lineHeight: 1.5 }}>
-            Sau khi hủy, khung giờ hẹn này sẽ được giải phóng ngay lập tức để phục vụ các khách hàng khác.
+            Sau khi hủy, khung giờ đã chọn sẽ không còn được giữ lại. Bạn có thể đặt lịch mới khi cần.
           </p>
 
           <div className="form-group" style={{ margin: 0 }}>

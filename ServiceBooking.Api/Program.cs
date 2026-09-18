@@ -1,5 +1,7 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -69,6 +71,42 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
+    });
+});
+
+// ==========================================================
+// 4.5. CẤU HÌNH RATE LIMITING (Chống spam API)
+// ==========================================================
+builder.Services.AddRateLimiter(rateLimiterOptions =>
+{
+    rateLimiterOptions.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    rateLimiterOptions.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            status = 429,
+            title = "Quá nhiều yêu cầu",
+            detail = "Bạn đã gửi quá nhiều yêu cầu trong thời gian ngắn. Vui lòng đợi trong giây lát rồi thử lại."
+        }, cancellationToken: token);
+    };
+
+    rateLimiterOptions.AddPolicy("BookingRatePolicy", httpContext =>
+    {
+        var clientIp = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 3,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
     });
 });
 
@@ -145,6 +183,9 @@ app.UseHttpsRedirection();
 
 // Kích hoạt CORS trước Auth
 app.UseCors("FrontendPolicy");
+
+// Kích hoạt Rate Limiting
+app.UseRateLimiter();
 
 // Kích hoạt Authentication & Authorization
 app.UseAuthentication();
