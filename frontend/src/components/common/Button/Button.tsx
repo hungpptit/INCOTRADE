@@ -11,7 +11,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /**
  * Component Button chuẩn toàn hệ thống
- * Tự động khóa và hiển thị spinner khi isLoading={true} để chống Double-Submit (Rule 5)
+ * Tự động khóa và hiển thị spinner khi isLoading={true} để chống Double-Submit
  */
 export function Button({
   children,

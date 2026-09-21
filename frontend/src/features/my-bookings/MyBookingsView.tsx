@@ -89,7 +89,7 @@ export function MyBookingsView() {
   const handleExecuteCancel = async () => {
     if (!cancellingBooking) return;
 
-    // Validate reason with Zod (Rule 3)
+    // Validate lý do hủy bằng Zod
     const validation = cancelSchema.safeParse({ reason: cancelReason.trim() });
     if (!validation.success) {
       setCancelError(validation.error.issues[0].message);
@@ -603,7 +603,7 @@ export function MyBookingsView() {
         </div>
       )}
 
-      {/* Modal Hủy Lịch Hẹn (Rule 6: Bắt buộc nhập lý do hủy) */}
+      {/* Modal Xác nhận Hủy Lịch Hẹn */}
       <Modal
         isOpen={Boolean(cancellingBooking)}
         onClose={() => {

@@ -7,7 +7,7 @@ import { authService } from '@/services/authService';
 import { Button } from '@/components/common/Button/Button';
 import { ErrorAlert } from '@/components/common/Feedback/StateFeedback';
 
-// Zod Schema Validate (Rule 3)
+// Schema kiểm tra hợp lệ dữ liệu đăng nhập bằng Zod
 const loginSchema = z.object({
   email: z.string().min(1, 'Vui lòng nhập địa chỉ Email.').email('Địa chỉ Email không đúng định dạng.'),
   password: z.string().min(6, 'Mật khẩu phải có tối thiểu 6 ký tự.'),

@@ -70,7 +70,7 @@ public static class DbInitializer
         await context.Staffs.AddRangeAsync(staff1, staff2);
 
         // ==========================================================
-        // 3. SEED SERVICES (5 dịch vụ theo đúng thuộc tính đề bài)
+        // 3. SEED SERVICES
         // ==========================================================
         var service1 = new Service
         {

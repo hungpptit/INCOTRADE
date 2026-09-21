@@ -281,7 +281,7 @@ p {
   }
 }
 
-/* Standard Buttons (Rule 5) */
+/* Standard Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -380,7 +380,7 @@ p {
   100% { transform: rotate(360deg); }
 }
 
-/* Badges (Rule 6) */
+/* Status Badges */
 .badge {
   display: inline-flex;
   align-items: center;

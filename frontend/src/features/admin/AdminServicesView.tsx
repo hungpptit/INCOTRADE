@@ -10,7 +10,7 @@ import { Modal } from '@/components/common/Modal/Modal';
 import { PaginationControls } from '@/components/common/Pagination/PaginationControls';
 import { EmptyState, ErrorAlert, LoadingSkeleton } from '@/components/common/Feedback/StateFeedback';
 
-// Zod Schema for Service Creation & Edit (Rule 3)
+// Schema kiểm tra thông tin dịch vụ bằng Zod
 const serviceFormSchema = z.object({
   name: z.string().min(1, 'Vui lòng nhập tên dịch vụ.'),
   description: z.string().optional(),

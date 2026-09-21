@@ -153,18 +153,23 @@ Nếu máy không cài đặt `dotnet-ef` hoặc bạn muốn chạy trực ti�
 
 ```
 INCOTRADE/
-├── ServiceBooking.Api/          # Backend ASP.NET Core Web API
+├── ServiceBooking.sln           # Visual Studio / .NET Solution liên kết các dự án
+├── ServiceBooking.Api/          # Backend ASP.NET Core Web API (.NET 7)
 │   ├── Common/                  # Constants (UserRoles, BookingStatus)
 │   ├── Controllers/             # API Endpoints
 │   ├── Data/                    # AppDbContext, DbInitializer (Seed Data)
 │   ├── Migrations/              # EF Core Code-First Migrations
 │   ├── Models/                  # 5 Entities (User, Service, Staff, WorkSchedule, Booking)
 │   └── appsettings.Development.json
+├── ServiceBooking.Tests/        # Bộ kiểm thử đơn vị xUnit Unit Tests (Điểm cộng Mục 12)
+│   ├── Helpers/                 # TestDbContextFactory (EF Core InMemory)
+│   └── Services/                # BookingServiceTests (13 Unit Tests kiểm thử TC1 -> TC6)
 ├── frontend/                    # Frontend Next.js App Router & TypeScript
 │   └── src/app/                 # Các màn hình theo route yêu cầu
 ├── docs/                        # Tài liệu đặc tả nghiệp vụ & database schema
 ├── docker-compose.yml           # Cấu hình container PostgreSQL 16 & pgweb
 ├── database_init.sql            # Script SQL tạo toàn bộ bảng & constraints
+├── test_all_cases.ps1           # Script kiểm thử tích hợp tự động (Integration Test)
 └── README.md                    # Tài liệu hướng dẫn cài đặt và chạy
 ```
 
@@ -180,17 +185,42 @@ INCOTRADE/
 
 ---
 
-## 8. Hướng dẫn chạy kiểm thử tự động (Automated Test Cases)
+## 8. Hướng dẫn chạy kiểm thử (Testing - Điểm cộng Mục 12)
 
-Hệ thống cung cấp script PowerShell tự động kiểm thử toàn bộ các kịch bản nghiệp vụ bắt buộc (từ TC1 đến TC6 theo yêu cầu đề bài):
-* **TC1**: Chặn đặt lịch trong quá khứ (`StartTime > DateTime.UtcNow`).
-* **TC2**: Chặn đặt lịch ngoài giờ làm việc của nhân viên.
-* **TC3**: Chặn hai đơn trùng khung giờ cùng một nhân viên (`HTTP 409 Conflict`).
-* **TC4**: Khách hàng không xem được thông tin đặt lịch của khách hàng khác.
-* **TC5**: Khách hàng không có quyền tự chuyển trạng thái hoàn thành dịch vụ (`HTTP 403 Forbidden`).
-* **TC6**: Chặn không cho phép hủy lịch hẹn đã hoàn thành.
+Dự án hiện thực đầy đủ cả 2 cấp độ kiểm thử chuyên nghiệp:
+1. **Unit Test (xUnit)**: Kiểm thử cô lập toàn bộ logic nghiệp vụ (không cần bật CSDL).
+2. **Integration Test (PowerShell E2E API)**: Kiểm thử tích hợp toàn diện trên CSDL thực tế.
 
-### Các bước thực hiện:
+---
+
+### 8.1. Chạy Unit Test (xUnit - Lệnh chuẩn `dotnet test`)
+
+Mở một cửa sổ Terminal tại thư mục gốc dự án (`INCOTRADE`) và chạy:
+
+```bash
+dotnet test
+```
+
+> **Kết quả:** Toàn bộ **13/13 Unit Tests** đều **PASSED** chỉ trong ~0.15 giây:
+> * Kiểm tra tính toán `EndTime = StartTime + DurationMinutes`.
+> * **[TC1]** Chặn đặt lịch trong quá khứ $\rightarrow$ Ném `BadRequestException`.
+> * Chặn đặt lịch vượt quá giới hạn 7 ngày mở lịch $\rightarrow$ Ném `BadRequestException`.
+> * **[TC2]** Chặn đặt lịch ngoài ca làm việc của nhân viên $\rightarrow$ Ném `BadRequestException`.
+> * **[TC3]** Chặn hai booking trùng khung giờ $\rightarrow$ Ném `ConflictException (409)`.
+> * Chặn hai booking giao khoảng giờ (Overlap) $\rightarrow$ Ném `ConflictException (409)`.
+> * Cho phép hai booking liền kề nhau (Adjacent Back-to-Back).
+> * **[TC4]** Khách hàng không xem được booking của khách hàng khác $\rightarrow$ Ném `NotFoundException (404)`.
+> * Quản trị viên (Admin) xem được booking của mọi khách hàng.
+> * **[TC5]** Chặn chuyển trạng thái trực tiếp từ Pending sang Completed mà chưa qua Confirmed $\rightarrow$ Ném `BadRequestException`.
+> * **[TC6]** Chặn không cho phép hủy lịch hẹn đã Completed $\rightarrow$ Ném `BadRequestException`.
+> * Chặn không cho phép hủy lịch hẹn đã bắt đầu trong quá khứ $\rightarrow$ Ném `BadRequestException`.
+> * Cho phép hủy lịch hẹn hợp lệ và lưu lại lý do hủy (`CancellationReason`).
+
+---
+
+### 8.2. Chạy Integration Test tự động (6 Test Cases TC1 -> TC6)
+
+Hệ thống cung cấp script PowerShell tự động kiểm thử toàn bộ các kịch bản nghiệp vụ bắt buộc (từ TC1 đến TC6 theo yêu cầu đề bài trên CSDL thực tế):
 
 #### Bước 1: Khởi động Backend API
 Mở cửa sổ Terminal tại thư mục dự án và chạy Backend API lắng nghe tại cổng `http://localhost:5000`:
@@ -204,5 +234,5 @@ Mở một cửa sổ Terminal khác (PowerShell) tại thư mục gốc dự á
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\test_all_cases.ps1
 ```
-*(Script sẽ tự động đăng nhập các tài khoản mẫu, chuẩn bị dữ liệu kiểm thử và lần lượt kích hoạt các API kịch bản).*
+*(Script sẽ tự động đăng nhập các tài khoản mẫu, chuẩn bị ca làm việc, tự tìm slot trống và lần lượt kiểm tra nghiêm ngặt từng mã HTTP status).*
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Middleware phân quyền Route Guarding (Rule 7)
+ * Middleware phân quyền Route Guarding
  * Bảo vệ tất cả các đường dẫn /admin/*
  */
 export function middleware(request: NextRequest) {

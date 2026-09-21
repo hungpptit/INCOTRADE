@@ -88,7 +88,7 @@ export async function httpClient<T>(
         // Phản hồi không phải JSON
       }
 
-      // Phân loại mã lỗi theo quy tắc Rule 2
+      // Xử lý thông báo lỗi theo mã trạng thái HTTP
       if (response.status === 409) {
         errorMessage = errorDetails?.detail || 'Khung giờ này vừa có người đặt trước. Quý khách vui lòng chọn khung giờ khác.';
       } else if (response.status === 429) {

@@ -101,7 +101,7 @@ public class BookingService : IBookingService
                 var slotStartUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotStart), DateTimeKind.Utc);
                 var slotEndUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotEnd), DateTimeKind.Utc);
 
-                // Loại bỏ slot giờ trong quá khứ nếu là ngày hôm nay (TC1)
+                // Loại bỏ khung giờ đã qua trong ngày
                 if (slotStartUtc > nowUtc)
                 {
                     // Kiểm tra xem slot có giao thoa với booking đã có hay không:
@@ -133,7 +133,7 @@ public class BookingService : IBookingService
             throw new NotFoundException("Không tìm thấy thông tin khách hàng.");
         }
 
-        // 2. Chuẩn hóa thời gian sang UTC và kiểm tra không đặt trong quá khứ (TC1)
+        // 2. Chuẩn hóa thời gian sang UTC và kiểm tra không đặt trong quá khứ
         var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
         if (startTimeUtc <= DateTime.UtcNow)
         {
@@ -185,8 +185,7 @@ public class BookingService : IBookingService
             throw new BadRequestException("Khung giờ bạn chọn rơi vào thời gian nghỉ trưa (12:30 - 13:30) của cửa hàng.");
         }
 
-        // 8. Kiểm tra booking phải nằm hoàn toàn trong ca làm việc của thợ (TC2)
-
+        // 8. Kiểm tra thời gian dịch vụ phải nằm trọn trong ca làm việc của nhân viên
         var isWithinShift = await _context.WorkSchedules
             .AsNoTracking()
             .AnyAsync(ws => ws.StaffId == request.StaffId 
@@ -199,12 +198,14 @@ public class BookingService : IBookingService
             throw new BadRequestException("Thời gian đặt lịch không nằm trong ca làm việc của nhân viên trong ngày này.");
         }
 
-        // 7. Xử lý Race Condition & Overlap Check (Mục 12 cộng điểm & TC3):
-        // Dùng Database Transaction kết hợp Row-Lock trên bảng Staffs để tuần tự hóa các request cùng mili-giây
-        using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
-
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT \"Id\" FROM \"Staffs\" WHERE \"Id\" = {request.StaffId} FOR UPDATE");
+        // 9. Pessimistic Locking: Sử dụng Row-Level Lock (FOR UPDATE) trên Staffs để tuần tự hóa các request đồng thời
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (_context.Database.IsRelational())
+        {
+            transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT \"Id\" FROM \"Staffs\" WHERE \"Id\" = {request.StaffId} FOR UPDATE");
+        }
 
         // Kiểm tra chống trùng lịch: NewStart < ExistingEnd AND NewEnd > ExistingStart
         var isConflict = await _context.Bookings
@@ -239,7 +240,12 @@ public class BookingService : IBookingService
 
         await _context.Bookings.AddAsync(booking);
         await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
+        
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+            await transaction.DisposeAsync();
+        }
 
         return new BookingDto
         {
@@ -268,7 +274,7 @@ public class BookingService : IBookingService
         var pageNumber = Math.Max(1, parameters.PageNumber);
         var pageSize = Math.Clamp(parameters.PageSize, 1, 100);
 
-        // Bảo vệ quyền hạn (TC4): Bắt buộc chỉ truy vấn booking của chính CustomerId lấy từ token JWT
+        // Chỉ truy vấn danh sách booking của chính CustomerId từ JWT Claims
         var query = _context.Bookings
             .AsNoTracking()
             .Include(b => b.Customer)
@@ -416,7 +422,7 @@ public class BookingService : IBookingService
             throw new NotFoundException($"Không tìm thấy đơn đặt lịch với mã ID: {id}");
         }
 
-        // Khách hàng chỉ xem được đơn của chính mình (TC4)
+        // Khách hàng chỉ có quyền xem đơn của chính mình
         if (!isAdmin && booking.CustomerId != currentUserId)
         {
             throw new NotFoundException($"Không tìm thấy đơn đặt lịch với mã ID: {id}");
@@ -532,7 +538,7 @@ public class BookingService : IBookingService
             throw new BadRequestException("Đơn đặt lịch này đã được hủy trước đó.");
         }
 
-        // 3. Không hủy đơn đã hoàn thành (TC6)
+        // 3. Không cho phép hủy đơn đã hoàn thành
         if (booking.Status == BookingStatus.Completed)
         {
             throw new BadRequestException("Không thể hủy đơn đặt lịch đã hoàn thành.");

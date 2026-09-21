@@ -70,7 +70,7 @@ export function ErrorAlert({
   );
 }
 
-// 3. Conflict Alert (HTTP 409 Conflict - Điểm cộng riêng trong đề bài & chuẩn Stitch UI)
+// 3. Conflict Alert (Cảnh báo trùng lịch hẹn - HTTP 409 Conflict)
 export function ConflictAlert({
   message,
   onSelectAnother,

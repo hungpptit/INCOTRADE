@@ -8,8 +8,8 @@ interface StatusBadgeProps {
 }
 
 /**
- * Huy hiệu trạng thái chuẩn nhận diện màu sắc rõ ràng (Rule 6)
- * Sử dụng icon thư viện Material Symbols Outlined sang trọng
+ * Huy hiệu trạng thái với màu sắc nhận diện trực quan
+ * Sử dụng icon thư viện Material Symbols Outlined
  */
 export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
   const { label, variant } = getStatusBadgeConfig(status);
