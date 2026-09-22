@@ -1,6 +1,6 @@
 # SERVICE BOOKING MANAGEMENT SYSTEM (HỆ THỐNG QUẢN LÝ ĐẶT LỊCH DỊCH VỤ)
 
-Dự án Full-stack Demo phục vụ kiểm tra năng lực Full-stack Intern theo tài liệu yêu cầu **Service Booking Demo Project Requirements**.
+Hệ thống quản lý đặt lịch dịch vụ (Service Booking Management System) được xây dựng trên nền tảng .NET 7 Web API, Next.js và PostgreSQL.
 
 ---
 
@@ -15,7 +15,34 @@ Dự án Full-stack Demo phục vụ kiểm tra năng lực Full-stack Intern th
 
 ---
 
-## 2. Thông tin tài khoản Demo (Seed Data)
+## 2. Danh sách chức năng theo yêu cầu (Requirements Checklist)
+
+### 2.1. Chức năng đã hoàn thành (Core Requirements - 100%)
+* [x] **1. Phân quyền & Vai trò**: Đăng nhập JWT, hỗ trợ 2 vai trò `Customer` và `Admin`.
+* [x] **2. Quản lý dịch vụ**: Thêm, sửa, khóa/mở lại dịch vụ; validate giá và thời lượng; tìm kiếm và phân trang tại database; chặn đặt dịch vụ bị khóa.
+* [x] **3. Nhân viên & Lịch làm việc**: Quản lý nhân viên; thiết lập ca trực; chống trùng ca làm việc; chặn đặt lịch với nhân viên bị khóa.
+* [x] **4. Quản lý booking**: 4 trạng thái bắt buộc (`Pending`, `Confirmed`, `Completed`, `Cancelled`); lọc theo ngày, trạng thái và phân trang; Customer chỉ quản lý lịch của mình, Admin quản lý toàn bộ.
+* [x] **5. Quy tắc nghiệp vụ**:
+  * Tự động tính $\text{EndTime} = \text{StartTime} + \text{DurationMinutes}$.
+  * Chặn đặt trong quá khứ và ngoài giờ làm việc.
+  * Thuật toán chống trùng lịch ($\text{NewStart} < \text{ExistingEnd} \text{ và } \text{NewEnd} > \text{ExistingStart}$), trả về `409 Conflict`.
+  * Hủy lịch bắt buộc nhập lý do, giải phóng khung giờ, chặn hủy lịch đã diễn ra hoặc đã hoàn thành.
+* [x] **6. Màn hình bắt buộc**: Hoàn thành đủ 7 màn hình Next.js App Router (`/login`, `/services`, `/booking`, `/my-bookings`, `/admin/services`, `/admin/schedules`, `/admin/bookings`).
+* [x] **7. API tối thiểu**: Hoàn thành toàn bộ API trong đặc tả + tài liệu Swagger UI tại `/swagger`.
+* [x] **8. Yêu cầu kỹ thuật**:
+  * **Backend**: DTOs riêng biệt, validation, async/await 100%, Global Exception Handling, phân trang tại database.
+  * **Frontend**: TypeScript không dùng `any`, đầy đủ trạng thái (loading skeleton, empty state, error 409 alert), chống click đúp form.
+  * **Database**: PostgreSQL với khóa chính, khóa ngoại, unique index (`Email`, `BookingCode`), hỗ trợ EF Core Migration & SQL Script.
+* [x] **9. Dữ liệu mẫu (Seed Data)**: Đầy đủ 1 Admin, 2 Customer, 2 Nhân viên, 5 Dịch vụ, ca trực động 7 ngày và 10 booking mẫu.
+* [x] **10. Kiểm thử**: Đạt toàn bộ 6 test cases bắt buộc (TC1 $\rightarrow$ TC6) trên cả 13 Unit Tests (xUnit) và script kiểm thử tích hợp tự động (`test_all_cases.ps1`).
+
+### 2.2. Chức năng chưa thực hiện (Tính năng nâng cao ngoài phạm vi cốt lõi)
+* [ ] Cập nhật trạng thái booking theo thời gian thực (Real-time với SignalR).
+* [ ] Background Job tự động quét và hủy booking quá hạn bằng Hangfire.
+
+---
+
+## 3. Thông tin tài khoản Demo (Seed Data)
 
 Hệ thống đã cấu hình tự động nạp dữ liệu mẫu hợp lệ, **tính động theo thời gian thực kể từ ngày khởi chạy ứng dụng** (7 ngày làm việc tiếp theo và 10 đơn đặt lịch mẫu với đủ các trạng thái).
 
@@ -30,7 +57,7 @@ Hệ thống đã cấu hình tự động nạp dữ liệu mẫu hợp lệ, *
 
 ---
 
-## 3. Yêu cầu môi trường trước khi chạy (Prerequisites)
+## 4. Yêu cầu môi trường trước khi chạy (Prerequisites)
 
 * [.NET SDK 7.0](https://dotnet.microsoft.com/download/dotnet/7.0) (hoặc mới hơn)
 * [Node.js v18+](https://nodejs.org/) và npm
@@ -38,7 +65,7 @@ Hệ thống đã cấu hình tự động nạp dữ liệu mẫu hợp lệ, *
 
 ---
 
-## 4. Hướng dẫn cài đặt và khởi chạy (Quick Start)
+## 5. Hướng dẫn cài đặt và khởi chạy (Quick Start)
 
 ### Bước 1: Khởi động Cơ sở dữ liệu (PostgreSQL & pgweb)
 
@@ -107,7 +134,7 @@ Frontend giao diện người dùng và quản trị viên chạy trên cổng *
 
 ---
 
-## 5. Migration & SQL Script (Cơ sở dữ liệu)
+## 6. Migration & SQL Script (Cơ sở dữ liệu)
 
 > [!TIP]
 > **Khuyên dùng:** Backend đã được lập trình để **tự động chạy Migration và Seed Data** mỗi khi khởi động `dotnet run`. Nếu bạn muốn chủ động tạo lại CSDL từ đầu hoặc chạy thủ công, hãy chọn 1 trong 2 cách dưới đây.
@@ -149,7 +176,7 @@ Nếu máy không cài đặt `dotnet-ef` hoặc bạn muốn chạy trực ti�
 
 ---
 
-## 6. Cấu trúc thư mục dự án
+## 7. Cấu trúc thư mục dự án
 
 ```
 INCOTRADE/
@@ -161,7 +188,7 @@ INCOTRADE/
 │   ├── Migrations/              # EF Core Code-First Migrations
 │   ├── Models/                  # 5 Entities (User, Service, Staff, WorkSchedule, Booking)
 │   └── appsettings.Development.json
-├── ServiceBooking.Tests/        # Bộ kiểm thử đơn vị xUnit Unit Tests (Điểm cộng Mục 12)
+├── ServiceBooking.Tests/        # Bộ kiểm thử đơn vị xUnit (Unit Tests)
 │   ├── Helpers/                 # TestDbContextFactory (EF Core InMemory)
 │   └── Services/                # BookingServiceTests (13 Unit Tests kiểm thử TC1 -> TC6)
 ├── frontend/                    # Frontend Next.js App Router & TypeScript
@@ -175,7 +202,7 @@ INCOTRADE/
 
 ---
 
-## 7. Các quy tắc nghiệp vụ cốt lõi đã hiện thực
+## 8. Các quy tắc nghiệp vụ cốt lõi đã hiện thực
 
 1. **Tính thời gian kết thúc**: $\text{EndTime} = \text{StartTime} + \text{DurationMinutes}$.
 2. **Chống trùng lịch (Conflict Check)**:
@@ -185,15 +212,15 @@ INCOTRADE/
 
 ---
 
-## 8. Hướng dẫn chạy kiểm thử (Testing - Điểm cộng Mục 12)
+## 9. Hướng dẫn chạy kiểm thử (Testing)
 
-Dự án hiện thực đầy đủ cả 2 cấp độ kiểm thử chuyên nghiệp:
+Dự án hiện thực đầy đủ cả 2 cấp độ kiểm thử:
 1. **Unit Test (xUnit)**: Kiểm thử cô lập toàn bộ logic nghiệp vụ (không cần bật CSDL).
 2. **Integration Test (PowerShell E2E API)**: Kiểm thử tích hợp toàn diện trên CSDL thực tế.
 
 ---
 
-### 8.1. Chạy Unit Test (xUnit - Lệnh chuẩn `dotnet test`)
+### 9.1. Chạy Unit Test (xUnit - Lệnh chuẩn `dotnet test`)
 
 Mở một cửa sổ Terminal tại thư mục gốc dự án (`INCOTRADE`) và chạy:
 
@@ -218,9 +245,9 @@ dotnet test
 
 ---
 
-### 8.2. Chạy Integration Test tự động (6 Test Cases TC1 -> TC6)
+### 9.2. Chạy Integration Test tự động (6 Test Cases TC1 -> TC6)
 
-Hệ thống cung cấp script PowerShell tự động kiểm thử toàn bộ các kịch bản nghiệp vụ bắt buộc (từ TC1 đến TC6 theo yêu cầu đề bài trên CSDL thực tế):
+Hệ thống cung cấp script PowerShell tự động kiểm thử toàn bộ các kịch bản nghiệp vụ chính (từ TC1 đến TC6 trên CSDL thực tế):
 
 #### Bước 1: Khởi động Backend API
 Mở cửa sổ Terminal tại thư mục dự án và chạy Backend API lắng nghe tại cổng `http://localhost:5000`:

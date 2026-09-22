@@ -24,6 +24,14 @@ const shiftSchema = z
 
 type ShiftFormData = z.infer<typeof shiftSchema>;
 
+// Zod Schema for Staff
+const staffSchema = z.object({
+  fullName: z.string().min(2, 'Họ tên nhân viên tối thiểu 2 ký tự.'),
+  email: z.string().email('Email không đúng định dạng.'),
+});
+
+type StaffFormData = z.infer<typeof staffSchema>;
+
 export function AdminSchedulesView() {
   const [staffs, setStaffs] = useState<Staff[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
@@ -53,6 +61,16 @@ export function AdminSchedulesView() {
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof ShiftFormData, string>>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [modalConflictError, setModalConflictError] = useState<string | null>(null);
+
+  // Staff Modal State
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [staffFormData, setStaffFormData] = useState<StaffFormData>({
+    fullName: '',
+    email: '',
+  });
+  const [staffFormErrors, setStaffFormErrors] = useState<Partial<Record<keyof StaffFormData, string>>>({});
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffModalError, setStaffModalError] = useState<string | null>(null);
 
   // 1. Fetch Staffs
   useEffect(() => {
@@ -128,6 +146,45 @@ export function AdminSchedulesView() {
     }
   };
 
+  // Handle Submit New Staff
+  const handleSaveStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffModalError(null);
+
+    const validation = staffSchema.safeParse(staffFormData);
+    if (!validation.success) {
+      const errors: Partial<Record<keyof StaffFormData, string>> = {};
+      validation.error.issues.forEach((issue) => {
+        const path = issue.path[0] as keyof StaffFormData;
+        errors[path] = issue.message;
+      });
+      setStaffFormErrors(errors);
+      return;
+    }
+
+    setIsSavingStaff(true);
+    try {
+      const newStaff = await staffService.create({
+        fullName: staffFormData.fullName.trim(),
+        email: staffFormData.email.trim(),
+      });
+
+      setStaffs((prev) => [...prev, newStaff]);
+      setSelectedStaffId(newStaff.id);
+      setIsStaffModalOpen(false);
+      setStaffFormData({ fullName: '', email: '' });
+      setStaffFormErrors({});
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setStaffModalError(err.message);
+      } else {
+        setStaffModalError('Không thể tạo nhân viên mới.');
+      }
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
+
   const currentStaff = staffs.find((s) => s.id === selectedStaffId);
 
   return (
@@ -166,18 +223,33 @@ export function AdminSchedulesView() {
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="lg"
-          disabled={!selectedStaffId}
-          onClick={() => {
-            setModalConflictError(null);
-            setFormErrors({});
-            setIsModalOpen(true);
-          }}
-        >
-          + Thêm Ca Làm Việc
-        </Button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              setStaffModalError(null);
+              setStaffFormErrors({});
+              setStaffFormData({ fullName: '', email: '' });
+              setIsStaffModalOpen(true);
+            }}
+          >
+            + Thêm Nhân Viên
+          </Button>
+
+          <Button
+            variant="primary"
+            size="lg"
+            disabled={!selectedStaffId}
+            onClick={() => {
+              setModalConflictError(null);
+              setFormErrors({});
+              setIsModalOpen(true);
+            }}
+          >
+            + Thêm Ca Làm Việc
+          </Button>
+        </div>
       </div>
 
       {/* Staff Selector Filter */}
@@ -379,6 +451,70 @@ export function AdminSchedulesView() {
                 <span style={{ color: 'var(--color-error)', fontSize: '0.88rem' }}>{formErrors.endTime}</span>
               )}
             </div>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Add Staff */}
+      <Modal
+        isOpen={isStaffModalOpen}
+        onClose={() => {
+          if (!isSavingStaff) setIsStaffModalOpen(false);
+        }}
+        title="Thêm Nhân Viên Mới"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsStaffModalOpen(false)} disabled={isSavingStaff}>
+              Hủy bỏ
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveStaff}
+              isLoading={isSavingStaff}
+              loadingText="Đang lưu nhân viên..."
+            >
+              Lưu Nhân Viên
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSaveStaff} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {staffModalError && <ConflictAlert message={staffModalError} />}
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" htmlFor="staffFullName">
+              Họ và tên nhân viên <span style={{ color: 'var(--color-error)' }}>*</span>
+            </label>
+            <input
+              id="staffFullName"
+              type="text"
+              className="form-input"
+              placeholder="Ví dụ: Lê Văn C"
+              value={staffFormData.fullName}
+              onChange={(e) => setStaffFormData({ ...staffFormData, fullName: e.target.value })}
+              disabled={isSavingStaff}
+            />
+            {staffFormErrors.fullName && (
+              <span style={{ color: 'var(--color-error)', fontSize: '0.88rem' }}>{staffFormErrors.fullName}</span>
+            )}
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" htmlFor="staffEmail">
+              Email nhân viên <span style={{ color: 'var(--color-error)' }}>*</span>
+            </label>
+            <input
+              id="staffEmail"
+              type="email"
+              className="form-input"
+              placeholder="staff3@booking.com"
+              value={staffFormData.email}
+              onChange={(e) => setStaffFormData({ ...staffFormData, email: e.target.value })}
+              disabled={isSavingStaff}
+            />
+            {staffFormErrors.email && (
+              <span style={{ color: 'var(--color-error)', fontSize: '0.88rem' }}>{staffFormErrors.email}</span>
+            )}
           </div>
         </form>
       </Modal>
