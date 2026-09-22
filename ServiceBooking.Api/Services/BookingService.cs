@@ -14,6 +14,10 @@ public class BookingService : IBookingService
 {
     private readonly AppDbContext _context;
 
+    private static readonly TimeSpan LunchStart = new(12, 30, 0);
+    private static readonly TimeSpan LunchEnd = new(13, 30, 0);
+    private const int MaxAdvanceBookingDays = 7;
+
     public BookingService(AppDbContext context)
     {
         _context = context;
@@ -21,7 +25,6 @@ public class BookingService : IBookingService
 
     public async Task<List<AvailableSlotDto>> GetAvailableSlotsAsync(AvailableSlotsQueryParameters parameters)
     {
-        // 1. Kiểm tra dịch vụ tồn tại và đang hoạt động
         var service = await _context.Services.AsNoTracking().FirstOrDefaultAsync(s => s.Id == parameters.ServiceId);
         if (service == null)
         {
@@ -32,7 +35,6 @@ public class BookingService : IBookingService
             throw new BadRequestException("Dịch vụ này hiện đang tạm ngưng phục vụ.");
         }
 
-        // 2. Kiểm tra nhân viên tồn tại và đang hoạt động
         var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == parameters.StaffId);
         if (staff == null)
         {
@@ -43,15 +45,13 @@ public class BookingService : IBookingService
             throw new BadRequestException("Nhân viên này hiện đang ngừng hoạt động.");
         }
 
-        // 3. Kiểm tra ngày đặt lịch nằm trong giới hạn 7 ngày mở lịch
         var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
-        var maxAllowedDate = todayUtc.AddDays(6);
+        var maxAllowedDate = todayUtc.AddDays(MaxAdvanceBookingDays - 1);
         if (parameters.Date > maxAllowedDate)
         {
-            throw new BadRequestException("Hệ thống chỉ mở lịch đặt trước tối đa trong vòng 7 ngày tới.");
+            throw new BadRequestException($"Hệ thống chỉ mở lịch đặt trước tối đa trong vòng {MaxAdvanceBookingDays} ngày tới.");
         }
 
-        // 4. Lấy danh sách ca làm việc của thợ trong ngày
         var shifts = await _context.WorkSchedules
             .AsNoTracking()
             .Where(ws => ws.StaffId == parameters.StaffId && ws.WorkDate == parameters.Date)
@@ -63,7 +63,6 @@ public class BookingService : IBookingService
             return new List<AvailableSlotDto>();
         }
 
-        // 4. Lấy các booking chưa bị hủy của thợ trong ngày (tính theo UTC)
         var dayStartUtc = parameters.Date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var dayEndUtc = parameters.Date.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
 
@@ -79,10 +78,6 @@ public class BookingService : IBookingService
         var duration = TimeSpan.FromMinutes(service.DurationMinutes);
         var nowUtc = DateTime.UtcNow;
 
-        var lunchStart = new TimeSpan(12, 30, 0);
-        var lunchEnd = new TimeSpan(13, 30, 0);
-
-        // 5. Chia ca làm việc thành các slot giờ bằng thời lượng dịch vụ
         foreach (var shift in shifts)
         {
             var currentSlotStart = shift.StartTime;
@@ -91,8 +86,8 @@ public class BookingService : IBookingService
             {
                 var currentSlotEnd = currentSlotStart + duration;
 
-                // Tự động bỏ qua khung giờ nghỉ trưa (12:30 - 13:30)
-                if (currentSlotStart < lunchEnd && currentSlotEnd > lunchStart)
+                // Bỏ qua giờ nghỉ trưa
+                if (currentSlotStart < LunchEnd && currentSlotEnd > LunchStart)
                 {
                     currentSlotStart = currentSlotEnd;
                     continue;
@@ -101,11 +96,8 @@ public class BookingService : IBookingService
                 var slotStartUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotStart), DateTimeKind.Utc);
                 var slotEndUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotEnd), DateTimeKind.Utc);
 
-                // Loại bỏ khung giờ đã qua trong ngày
                 if (slotStartUtc > nowUtc)
                 {
-                    // Kiểm tra xem slot có giao thoa với booking đã có hay không:
-                    // Slot trùng khi: slotStart < existingEnd AND slotEnd > existingStart
                     var hasConflict = existingBookings.Any(b => slotStartUtc < b.EndTime && slotEndUtc > b.StartTime);
 
                     availableSlots.Add(new AvailableSlotDto
@@ -126,21 +118,18 @@ public class BookingService : IBookingService
 
     public async Task<BookingDto> CreateBookingAsync(Guid customerId, CreateBookingRequest request)
     {
-        // 1. Kiểm tra khách hàng tồn tại
         var customer = await _context.Users.FindAsync(customerId);
         if (customer == null)
         {
             throw new NotFoundException("Không tìm thấy thông tin khách hàng.");
         }
 
-        // 2. Chuẩn hóa thời gian sang UTC và kiểm tra không đặt trong quá khứ
         var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
         if (startTimeUtc <= DateTime.UtcNow)
         {
             throw new BadRequestException("Thời gian đặt lịch phải lớn hơn thời gian hiện tại.");
         }
 
-        // 3. Kiểm tra dịch vụ tồn tại và đang active
         var service = await _context.Services.FindAsync(request.ServiceId);
         if (service == null)
         {
@@ -151,10 +140,8 @@ public class BookingService : IBookingService
             throw new BadRequestException("Không thể đặt dịch vụ đang bị khóa.");
         }
 
-        // 4. Backend tự động tính EndTime = StartTime + DurationMinutes
         var endTimeUtc = startTimeUtc.AddMinutes(service.DurationMinutes);
 
-        // 5. Kiểm tra nhân viên tồn tại và đang active
         var staff = await _context.Staffs.FindAsync(request.StaffId);
         if (staff == null)
         {
@@ -165,27 +152,24 @@ public class BookingService : IBookingService
             throw new BadRequestException("Không thể đặt lịch với nhân viên đang bị khóa.");
         }
 
-        // 6. Kiểm tra ngày đặt lịch không vượt quá 7 ngày mở lịch
         var bookingDate = DateOnly.FromDateTime(startTimeUtc);
         var todayBookingDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        var maxBookingDate = todayBookingDate.AddDays(6);
+        var maxBookingDate = todayBookingDate.AddDays(MaxAdvanceBookingDays - 1);
         if (bookingDate > maxBookingDate)
         {
-            throw new BadRequestException("Hệ thống chỉ mở lịch đặt trước tối đa trong vòng 7 ngày tới.");
+            throw new BadRequestException($"Hệ thống chỉ mở lịch đặt trước tối đa trong vòng {MaxAdvanceBookingDays} ngày tới.");
         }
 
-        // 7. Kiểm tra booking không nằm trong giờ nghỉ trưa (12:30 - 13:30)
-        var lunchStart = new TimeSpan(12, 30, 0);
-        var lunchEnd = new TimeSpan(13, 30, 0);
+        // Bỏ qua giờ nghỉ trưa
         var bookingStartTime = TimeOnly.FromDateTime(startTimeUtc).ToTimeSpan();
         var bookingEndTime = TimeOnly.FromDateTime(endTimeUtc).ToTimeSpan();
 
-        if (bookingStartTime < lunchEnd && bookingEndTime > lunchStart)
+        if (bookingStartTime < LunchEnd && bookingEndTime > LunchStart)
         {
             throw new BadRequestException("Khung giờ bạn chọn rơi vào thời gian nghỉ trưa (12:30 - 13:30) của cửa hàng.");
         }
 
-        // 8. Kiểm tra thời gian dịch vụ phải nằm trọn trong ca làm việc của nhân viên
+        // Kiểm tra ca làm việc
         var isWithinShift = await _context.WorkSchedules
             .AsNoTracking()
             .AnyAsync(ws => ws.StaffId == request.StaffId 
@@ -198,75 +182,88 @@ public class BookingService : IBookingService
             throw new BadRequestException("Thời gian đặt lịch không nằm trong ca làm việc của nhân viên trong ngày này.");
         }
 
-        // 9. Pessimistic Locking: Sử dụng Row-Level Lock (FOR UPDATE) trên Staffs để tuần tự hóa các request đồng thời
+        // Khóa dòng chống race condition
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
         if (_context.Database.IsRelational())
         {
             transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT \"Id\" FROM \"Staffs\" WHERE \"Id\" = {request.StaffId} FOR UPDATE");
         }
 
-        // Kiểm tra chống trùng lịch: NewStart < ExistingEnd AND NewEnd > ExistingStart
-        var isConflict = await _context.Bookings
-            .AnyAsync(b => b.StaffId == request.StaffId 
-                        && b.Status != BookingStatus.Cancelled
-                        && startTimeUtc < b.EndTime 
-                        && endTimeUtc > b.StartTime);
-
-        if (isConflict)
+        try
         {
-            throw new ConflictException("Khung giờ này vừa được khách hàng khác đặt trước. Vui lòng chọn khung giờ khác.");
+            if (transaction != null)
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"Staffs\" WHERE \"Id\" = {request.StaffId} FOR UPDATE");
+            }
+
+            // Kiểm tra trùng lịch
+            var isConflict = await _context.Bookings
+                .AnyAsync(b => b.StaffId == request.StaffId 
+                            && b.Status != BookingStatus.Cancelled
+                            && startTimeUtc < b.EndTime 
+                            && endTimeUtc > b.StartTime);
+
+            if (isConflict)
+            {
+                throw new ConflictException("Khung giờ này vừa được khách hàng khác đặt trước. Vui lòng chọn khung giờ khác.");
+            }
+
+            // Sinh mã booking duy nhất
+            var datePrefix = DateTime.UtcNow.ToString("yyyyMMdd");
+            var randomSuffix = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+            var bookingCode = $"BK{datePrefix}-{randomSuffix}";
+
+            var booking = new Booking
+            {
+                Id = Guid.NewGuid(),
+                BookingCode = bookingCode,
+                CustomerId = customerId,
+                ServiceId = request.ServiceId,
+                StaffId = request.StaffId,
+                StartTime = startTimeUtc,
+                EndTime = endTimeUtc,
+                Status = BookingStatus.Pending,
+                CustomerNote = request.CustomerNote?.Trim(),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _context.Bookings.AddAsync(booking);
+            await _context.SaveChangesAsync();
+            
+            if (transaction != null)
+            {
+                await transaction.CommitAsync();
+            }
+
+            return new BookingDto
+            {
+                Id = booking.Id,
+                BookingCode = booking.BookingCode,
+                CustomerId = customer.Id,
+                CustomerName = customer.FullName,
+                CustomerEmail = customer.Email,
+                ServiceId = service.Id,
+                ServiceName = service.Name,
+                ServicePrice = service.Price,
+                DurationMinutes = service.DurationMinutes,
+                StaffId = staff.Id,
+                StaffName = staff.FullName,
+                StartTime = booking.StartTime,
+                EndTime = booking.EndTime,
+                Status = booking.Status,
+                CustomerNote = booking.CustomerNote,
+                CancellationReason = booking.CancellationReason,
+                CreatedAt = booking.CreatedAt
+            };
         }
-
-        // Tạo mã BookingCode duy nhất (VD: BK20260918-7249)
-        var datePrefix = DateTime.UtcNow.ToString("yyyyMMdd");
-        var randomSuffix = Random.Shared.Next(1000, 9999);
-        var bookingCode = $"BK{datePrefix}-{randomSuffix}";
-
-        var booking = new Booking
+        finally
         {
-            Id = Guid.NewGuid(),
-            BookingCode = bookingCode,
-            CustomerId = customerId,
-            ServiceId = request.ServiceId,
-            StaffId = request.StaffId,
-            StartTime = startTimeUtc,
-            EndTime = endTimeUtc,
-            Status = BookingStatus.Pending,
-            CustomerNote = request.CustomerNote?.Trim(),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _context.Bookings.AddAsync(booking);
-        await _context.SaveChangesAsync();
-        
-        if (transaction != null)
-        {
-            await transaction.CommitAsync();
-            await transaction.DisposeAsync();
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
-
-        return new BookingDto
-        {
-            Id = booking.Id,
-            BookingCode = booking.BookingCode,
-            CustomerId = customer.Id,
-            CustomerName = customer.FullName,
-            CustomerEmail = customer.Email,
-            ServiceId = service.Id,
-            ServiceName = service.Name,
-            ServicePrice = service.Price,
-            DurationMinutes = service.DurationMinutes,
-            StaffId = staff.Id,
-            StaffName = staff.FullName,
-            StartTime = booking.StartTime,
-            EndTime = booking.EndTime,
-            Status = booking.Status,
-            CustomerNote = booking.CustomerNote,
-            CancellationReason = booking.CancellationReason,
-            CreatedAt = booking.CreatedAt
-        };
     }
 
     public async Task<PagedResult<BookingDto>> GetMyBookingsAsync(Guid customerId, MyBookingQueryParameters parameters)
@@ -274,7 +271,6 @@ public class BookingService : IBookingService
         var pageNumber = Math.Max(1, parameters.PageNumber);
         var pageSize = Math.Clamp(parameters.PageSize, 1, 100);
 
-        // Chỉ truy vấn danh sách booking của chính CustomerId từ JWT Claims
         var query = _context.Bookings
             .AsNoTracking()
             .Include(b => b.Customer)
@@ -282,7 +278,6 @@ public class BookingService : IBookingService
             .Include(b => b.Staff)
             .Where(b => b.CustomerId == customerId);
 
-        // 1. Lọc theo ngày hẹn
         if (parameters.Date.HasValue)
         {
             var dayStartUtc = parameters.Date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -290,7 +285,6 @@ public class BookingService : IBookingService
             query = query.Where(b => b.StartTime < dayEndUtc && b.EndTime > dayStartUtc);
         }
 
-        // 2. Lọc theo trạng thái
         if (!string.IsNullOrWhiteSpace(parameters.Status))
         {
             query = query.Where(b => b.Status == parameters.Status.Trim());
@@ -298,7 +292,6 @@ public class BookingService : IBookingService
 
         var totalItems = await query.CountAsync();
 
-        // 3. Sắp xếp linh hoạt theo tiêu chí SortBy (mặc định là mới đặt nhất)
         query = parameters.SortBy?.ToLowerInvariant() switch
         {
             "starttimeasc" => query.OrderBy(b => b.StartTime).ThenBy(b => b.Id),
@@ -346,7 +339,6 @@ public class BookingService : IBookingService
             .Include(b => b.Staff)
             .AsQueryable();
 
-        // 1. Lọc theo ngày
         if (parameters.Date.HasValue)
         {
             var dayStartUtc = parameters.Date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -354,19 +346,16 @@ public class BookingService : IBookingService
             query = query.Where(b => b.StartTime < dayEndUtc && b.EndTime > dayStartUtc);
         }
 
-        // 2. Lọc theo trạng thái
         if (!string.IsNullOrWhiteSpace(parameters.Status))
         {
             query = query.Where(b => b.Status == parameters.Status.Trim());
         }
 
-        // 3. Lọc theo nhân viên
         if (parameters.StaffId.HasValue)
         {
             query = query.Where(b => b.StaffId == parameters.StaffId.Value);
         }
 
-        // 4. Tìm kiếm theo mã booking, tên khách, email khách hoặc tên dịch vụ
         if (!string.IsNullOrWhiteSpace(parameters.Search))
         {
             var term = parameters.Search.Trim().ToLower();
@@ -428,26 +417,7 @@ public class BookingService : IBookingService
             throw new NotFoundException($"Không tìm thấy đơn đặt lịch với mã ID: {id}");
         }
 
-        return new BookingDto
-        {
-            Id = booking.Id,
-            BookingCode = booking.BookingCode,
-            CustomerId = booking.CustomerId,
-            CustomerName = booking.Customer.FullName,
-            CustomerEmail = booking.Customer.Email,
-            ServiceId = booking.ServiceId,
-            ServiceName = booking.Service.Name,
-            ServicePrice = booking.Service.Price,
-            DurationMinutes = booking.Service.DurationMinutes,
-            StaffId = booking.StaffId,
-            StaffName = booking.Staff.FullName,
-            StartTime = booking.StartTime,
-            EndTime = booking.EndTime,
-            Status = booking.Status,
-            CustomerNote = booking.CustomerNote,
-            CancellationReason = booking.CancellationReason,
-            CreatedAt = booking.CreatedAt
-        };
+        return MapToDto(booking);
     }
 
     public async Task<BookingDto> UpdateBookingStatusAsync(Guid id, UpdateBookingStatusRequest request)
@@ -469,20 +439,16 @@ public class BookingService : IBookingService
             throw new BadRequestException($"Trạng thái '{newStatus}' không hợp lệ. Các trạng thái được phép: Pending, Confirmed, Completed, Cancelled.");
         }
 
-        // Kiểm tra luồng trạng thái (State Transition Rules):
-        // 1. Không thay đổi đơn đã hoàn thành (Completed)
         if (booking.Status == BookingStatus.Completed)
         {
             throw new BadRequestException("Không thể thay đổi trạng thái của đơn đặt lịch đã hoàn thành.");
         }
 
-        // 2. Không thay đổi đơn đã bị hủy (Cancelled)
         if (booking.Status == BookingStatus.Cancelled)
         {
             throw new BadRequestException("Không thể thay đổi trạng thái của đơn đặt lịch đã bị hủy.");
         }
 
-        // 3. Đơn Pending không thể nhảy thẳng lên Completed mà phải qua Confirmed
         if (booking.Status == BookingStatus.Pending && newStatus == BookingStatus.Completed)
         {
             throw new BadRequestException("Đơn đặt lịch cần được xác nhận (Confirmed) trước khi chuyển sang Hoàn thành (Completed).");
@@ -491,26 +457,7 @@ public class BookingService : IBookingService
         booking.Status = newStatus;
         await _context.SaveChangesAsync();
 
-        return new BookingDto
-        {
-            Id = booking.Id,
-            BookingCode = booking.BookingCode,
-            CustomerId = booking.CustomerId,
-            CustomerName = booking.Customer.FullName,
-            CustomerEmail = booking.Customer.Email,
-            ServiceId = booking.ServiceId,
-            ServiceName = booking.Service.Name,
-            ServicePrice = booking.Service.Price,
-            DurationMinutes = booking.Service.DurationMinutes,
-            StaffId = booking.StaffId,
-            StaffName = booking.Staff.FullName,
-            StartTime = booking.StartTime,
-            EndTime = booking.EndTime,
-            Status = booking.Status,
-            CustomerNote = booking.CustomerNote,
-            CancellationReason = booking.CancellationReason,
-            CreatedAt = booking.CreatedAt
-        };
+        return MapToDto(booking);
     }
 
     public async Task<BookingDto> CancelBookingAsync(Guid id, Guid currentUserId, bool isAdmin, CancelBookingRequest request)
@@ -526,54 +473,52 @@ public class BookingService : IBookingService
             throw new NotFoundException($"Không tìm thấy đơn đặt lịch với mã ID: {id}");
         }
 
-        // 1. Kiểm tra quyền sở hữu (Customer chỉ được hủy đơn của mình)
         if (!isAdmin && booking.CustomerId != currentUserId)
         {
             throw new NotFoundException($"Không tìm thấy đơn đặt lịch với mã ID: {id}");
         }
 
-        // 2. Không hủy đơn đã bị hủy trước đó
         if (booking.Status == BookingStatus.Cancelled)
         {
             throw new BadRequestException("Đơn đặt lịch này đã được hủy trước đó.");
         }
 
-        // 3. Không cho phép hủy đơn đã hoàn thành
         if (booking.Status == BookingStatus.Completed)
         {
             throw new BadRequestException("Không thể hủy đơn đặt lịch đã hoàn thành.");
         }
 
-        // 4. Không hủy đơn đã bắt đầu hoặc đã diễn ra trong quá khứ
         if (booking.StartTime <= DateTime.UtcNow)
         {
             throw new BadRequestException("Không thể hủy đơn đặt lịch đã bắt đầu hoặc đã diễn ra trong quá khứ.");
         }
 
         booking.Status = BookingStatus.Cancelled;
-        booking.CancellationReason = request.CancellationReason.Trim();
+        booking.CancellationReason = request.CancellationReason?.Trim() ?? string.Empty;
 
         await _context.SaveChangesAsync();
 
-        return new BookingDto
-        {
-            Id = booking.Id,
-            BookingCode = booking.BookingCode,
-            CustomerId = booking.CustomerId,
-            CustomerName = booking.Customer.FullName,
-            CustomerEmail = booking.Customer.Email,
-            ServiceId = booking.ServiceId,
-            ServiceName = booking.Service.Name,
-            ServicePrice = booking.Service.Price,
-            DurationMinutes = booking.Service.DurationMinutes,
-            StaffId = booking.StaffId,
-            StaffName = booking.Staff.FullName,
-            StartTime = booking.StartTime,
-            EndTime = booking.EndTime,
-            Status = booking.Status,
-            CustomerNote = booking.CustomerNote,
-            CancellationReason = booking.CancellationReason,
-            CreatedAt = booking.CreatedAt
-        };
+        return MapToDto(booking);
     }
+
+    private static BookingDto MapToDto(Booking booking) => new()
+    {
+        Id = booking.Id,
+        BookingCode = booking.BookingCode,
+        CustomerId = booking.CustomerId,
+        CustomerName = booking.Customer?.FullName ?? string.Empty,
+        CustomerEmail = booking.Customer?.Email ?? string.Empty,
+        ServiceId = booking.ServiceId,
+        ServiceName = booking.Service?.Name ?? string.Empty,
+        ServicePrice = booking.Service?.Price ?? 0,
+        DurationMinutes = booking.Service?.DurationMinutes ?? 0,
+        StaffId = booking.StaffId,
+        StaffName = booking.Staff?.FullName ?? string.Empty,
+        StartTime = booking.StartTime,
+        EndTime = booking.EndTime,
+        Status = booking.Status,
+        CustomerNote = booking.CustomerNote,
+        CancellationReason = booking.CancellationReason,
+        CreatedAt = booking.CreatedAt
+    };
 }

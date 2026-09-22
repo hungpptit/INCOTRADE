@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using ServiceBooking.Api.Data;
 using ServiceBooking.Api.DTOs.Schedules;
@@ -21,9 +22,7 @@ public class StaffManagementService : IStaffManagementService
     {
         var query = _context.Staffs.AsNoTracking().AsQueryable();
 
-        // 1. Phân quyền xem IsActive:
-        // Khách hàng (hoặc chưa đăng nhập): BẮT BUỘC chỉ xem nhân viên đang hoạt động (IsActive = true)
-        // Admin: Được xem toàn bộ, hoặc lọc theo IsActive nếu truyền tham số
+        // Khách hàng chỉ xem nhân viên đang hoạt động
         if (!isAdmin)
         {
             query = query.Where(s => s.IsActive);
@@ -33,7 +32,6 @@ public class StaffManagementService : IStaffManagementService
             query = query.Where(s => s.IsActive == parameters.IsActive.Value);
         }
 
-        // 2. Tìm kiếm theo họ tên hoặc email
         if (!string.IsNullOrWhiteSpace(parameters.Search))
         {
             var searchTerm = parameters.Search.Trim().ToLower();
@@ -92,7 +90,14 @@ public class StaffManagementService : IStaffManagementService
         };
 
         await _context.Staffs.AddAsync(staff);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            throw new ConflictException("Email nhân viên đã tồn tại trên hệ thống.");
+        }
 
         return new StaffDto
         {
@@ -124,7 +129,14 @@ public class StaffManagementService : IStaffManagementService
         staff.Email = emailNormalized;
         staff.IsActive = request.IsActive;
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            throw new ConflictException("Email nhân viên đã được sử dụng bởi nhân viên khác.");
+        }
 
         return new StaffDto
         {
@@ -137,7 +149,6 @@ public class StaffManagementService : IStaffManagementService
 
     public async Task<List<WorkScheduleDto>> GetStaffSchedulesAsync(Guid staffId, ScheduleQueryParameters parameters)
     {
-        // 1. Kiểm tra nhân viên có tồn tại không -> Nếu không trả về 404 Not Found
         var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == staffId);
         if (staff == null)
         {
@@ -148,14 +159,12 @@ public class StaffManagementService : IStaffManagementService
             .AsNoTracking()
             .Where(ws => ws.StaffId == staffId);
 
-        // 2. Lọc theo khoảng ngày nếu có truyền
         if (parameters.FromDate.HasValue)
         {
             query = query.Where(ws => ws.WorkDate >= parameters.FromDate.Value);
         }
         else
         {
-            // Mặc định lấy từ ngày hôm nay trở đi
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             query = query.Where(ws => ws.WorkDate >= today);
         }
@@ -182,65 +191,88 @@ public class StaffManagementService : IStaffManagementService
 
     public async Task<WorkScheduleDto> CreateWorkScheduleAsync(Guid staffId, CreateWorkScheduleRequest request)
     {
-        // 1. Kiểm tra nhân viên có tồn tại không
         var staff = await _context.Staffs.FindAsync(staffId);
         if (staff == null)
         {
             throw new NotFoundException($"Không tìm thấy nhân viên với mã ID: {staffId}");
         }
 
-        // 2. Không cho phép tạo lịch cho nhân viên đang bị khóa (Inactive)
         if (!staff.IsActive)
         {
             throw new BadRequestException("Không thể tạo lịch làm việc cho nhân viên đang ngừng hoạt động.");
         }
 
-        // 3. Kiểm tra StartTime < EndTime
         if (request.StartTime >= request.EndTime)
         {
             throw new BadRequestException("Thời gian bắt đầu ca làm việc phải nhỏ hơn thời gian kết thúc.");
         }
 
-        // 4. Kiểm tra ngày làm việc không được ở quá khứ
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         if (request.WorkDate < today)
         {
             throw new BadRequestException("Không thể tạo ca làm việc trong quá khứ.");
         }
 
-        // 5. Kiểm tra chống trùng ca làm việc (Shift Overlap Check) trực tiếp tại Database:
-        // Hai ca trùng nhau khi: NewStart < ExistingEnd AND NewEnd > ExistingStart
-        var isOverlapping = await _context.WorkSchedules
-            .AnyAsync(ws => ws.StaffId == staffId 
-                         && ws.WorkDate == request.WorkDate 
-                         && request.StartTime < ws.EndTime 
-                         && request.EndTime > ws.StartTime);
-
-        if (isOverlapping)
+        // Khóa dòng nhân viên chống race condition
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (_context.Database.IsRelational())
         {
-            throw new ConflictException($"Ca làm việc ({request.StartTime:hh\\:mm} - {request.EndTime:hh\\:mm}) bị trùng với ca làm việc đã tồn tại của nhân viên trong ngày {request.WorkDate:yyyy-MM-dd}.");
+            transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
         }
 
-        var schedule = new WorkSchedule
+        try
         {
-            Id = Guid.NewGuid(),
-            StaffId = staffId,
-            WorkDate = request.WorkDate,
-            StartTime = request.StartTime,
-            EndTime = request.EndTime
-        };
+            if (transaction != null)
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT \"Id\" FROM \"Staffs\" WHERE \"Id\" = {staffId} FOR UPDATE");
+            }
 
-        await _context.WorkSchedules.AddAsync(schedule);
-        await _context.SaveChangesAsync();
+            // Kiểm tra trùng ca làm việc
+            var isOverlapping = await _context.WorkSchedules
+                .AnyAsync(ws => ws.StaffId == staffId 
+                             && ws.WorkDate == request.WorkDate 
+                             && request.StartTime < ws.EndTime 
+                             && request.EndTime > ws.StartTime);
 
-        return new WorkScheduleDto
+            if (isOverlapping)
+            {
+                throw new ConflictException($"Ca làm việc ({request.StartTime:hh\\:mm} - {request.EndTime:hh\\:mm}) bị trùng với ca làm việc đã tồn tại của nhân viên trong ngày {request.WorkDate:yyyy-MM-dd}.");
+            }
+
+            var schedule = new WorkSchedule
+            {
+                Id = Guid.NewGuid(),
+                StaffId = staffId,
+                WorkDate = request.WorkDate,
+                StartTime = request.StartTime,
+                EndTime = request.EndTime
+            };
+
+            await _context.WorkSchedules.AddAsync(schedule);
+            await _context.SaveChangesAsync();
+
+            if (transaction != null)
+            {
+                await transaction.CommitAsync();
+            }
+
+            return new WorkScheduleDto
+            {
+                Id = schedule.Id,
+                StaffId = schedule.StaffId,
+                StaffName = staff.FullName,
+                WorkDate = schedule.WorkDate,
+                StartTime = schedule.StartTime,
+                EndTime = schedule.EndTime
+            };
+        }
+        finally
         {
-            Id = schedule.Id,
-            StaffId = schedule.StaffId,
-            StaffName = staff.FullName,
-            WorkDate = schedule.WorkDate,
-            StartTime = schedule.StartTime,
-            EndTime = schedule.EndTime
-        };
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
     }
 }

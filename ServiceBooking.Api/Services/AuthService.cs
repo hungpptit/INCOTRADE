@@ -17,22 +17,25 @@ public class AuthService : IAuthService
         _jwtService = jwtService;
     }
 
+    // Dummy hash chống timing attack
+    private static readonly string DummyHash = BCrypt.Net.BCrypt.HashPassword("Dummy@123456");
+
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
         var normalizedEmail = request.Email.Trim().ToLower();
 
-        // Tìm user theo email (không phân biệt hoa thường)
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
 
-        // Kiểm tra user và verify mật khẩu BCrypt
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        var passwordHashToVerify = user?.PasswordHash ?? DummyHash;
+        var isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, passwordHashToVerify);
+
+        if (user == null || !isPasswordValid)
         {
             throw new BadRequestException("Email hoặc mật khẩu không chính xác.");
         }
 
-        // Sinh JWT token
         var token = _jwtService.GenerateToken(user);
 
         return new LoginResponse
