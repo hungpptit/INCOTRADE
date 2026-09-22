@@ -361,6 +361,30 @@ public class BookingServiceTests
         ex.WithMessage("*xác nhận (Confirmed) trước khi chuyển sang Hoàn thành*");
     }
 
+    [Fact]
+    public async Task UpdateBookingStatusAsync_WhenStatusIsCancelled_ShouldThrowBadRequestException()
+    {
+        // Arrange
+        using var context = TestDbContextFactory.CreateInMemoryDbContext();
+        var (bookingService, testDate) = await SetupTestDataAsync(context);
+
+        var slotStart = testDate.ToDateTime(new TimeOnly(10, 0, 0), DateTimeKind.Utc);
+        var booking = await bookingService.CreateBookingAsync(_customerId1, new CreateBookingRequest
+        {
+            ServiceId = _serviceId,
+            StaffId = _staffId,
+            StartTime = slotStart
+        });
+
+        // Act
+        var request = new UpdateBookingStatusRequest { Status = BookingStatus.Cancelled };
+        Func<Task> act = async () => await bookingService.UpdateBookingStatusAsync(booking.Id, request);
+
+        // Assert
+        var ex = await act.Should().ThrowAsync<BadRequestException>();
+        ex.WithMessage("*sử dụng chức năng Hủy đơn*");
+    }
+
     #endregion
 
     #region 7. Quy tắc hủy lịch hẹn

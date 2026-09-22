@@ -87,7 +87,7 @@ public class BookingService : IBookingService
                 var currentSlotEnd = currentSlotStart + duration;
 
                 // Bỏ qua giờ nghỉ trưa
-                if (currentSlotStart < LunchEnd && currentSlotEnd > LunchStart)
+                if (IsOverlappingLunch(currentSlotStart, currentSlotEnd))
                 {
                     currentSlotStart = currentSlotEnd;
                     continue;
@@ -164,7 +164,7 @@ public class BookingService : IBookingService
         var bookingStartTime = TimeOnly.FromDateTime(startTimeUtc).ToTimeSpan();
         var bookingEndTime = TimeOnly.FromDateTime(endTimeUtc).ToTimeSpan();
 
-        if (bookingStartTime < LunchEnd && bookingEndTime > LunchStart)
+        if (IsOverlappingLunch(bookingStartTime, bookingEndTime))
         {
             throw new BadRequestException("Khung giờ bạn chọn rơi vào thời gian nghỉ trưa (12:30 - 13:30) của cửa hàng.");
         }
@@ -449,6 +449,11 @@ public class BookingService : IBookingService
             throw new BadRequestException("Không thể thay đổi trạng thái của đơn đặt lịch đã bị hủy.");
         }
 
+        if (newStatus == BookingStatus.Cancelled)
+        {
+            throw new BadRequestException("Không thể chuyển sang trạng thái Hủy đơn tại đây. Vui lòng sử dụng chức năng Hủy đơn để cung cấp lý do hủy.");
+        }
+
         if (booking.Status == BookingStatus.Pending && newStatus == BookingStatus.Completed)
         {
             throw new BadRequestException("Đơn đặt lịch cần được xác nhận (Confirmed) trước khi chuyển sang Hoàn thành (Completed).");
@@ -521,4 +526,7 @@ public class BookingService : IBookingService
         CancellationReason = booking.CancellationReason,
         CreatedAt = booking.CreatedAt
     };
+
+    private static bool IsOverlappingLunch(TimeSpan start, TimeSpan end) =>
+        start < LunchEnd && end > LunchStart;
 }
