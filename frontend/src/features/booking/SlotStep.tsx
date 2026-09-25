@@ -41,16 +41,36 @@ export function SlotStep({
     });
   }
 
-  // Helper to extract the actual hour of slot without timezone shift
-  const getSlotHour = (isoString: string): number => {
+  // Check if selectedDate is today in local time
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+  const isSelectedToday = selectedDate === todayStr;
+
+  // Helper to extract the actual hour and minute of slot
+  const getSlotHourMinute = (isoString: string): { hour: number; minute: number } => {
     const formatted = formatTime(isoString);
-    const hourPart = parseInt(formatted.split(':')[0], 10);
-    return isNaN(hourPart) ? 12 : hourPart;
+    const [h, m] = formatted.split(':').map((v) => parseInt(v, 10));
+    return {
+      hour: isNaN(h) ? 12 : h,
+      minute: isNaN(m) ? 0 : m,
+    };
   };
 
+  // Filter out slots that have already passed if selected date is today
+  const activeSlots = slots.filter((slot) => {
+    if (!isSelectedToday) return true;
+    const { hour, minute } = getSlotHourMinute(slot.startTime);
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    return hour > currentHour || (hour === currentHour && minute > currentMinute);
+  });
+
   // Partition slots into Morning (before 12:00) and Afternoon/Evening (12:00 onwards)
-  const morningSlots = slots.filter((s) => getSlotHour(s.startTime) < 12);
-  const afternoonSlots = slots.filter((s) => getSlotHour(s.startTime) >= 12);
+  const morningSlots = activeSlots.filter((s) => getSlotHourMinute(s.startTime).hour < 12);
+  const afternoonSlots = activeSlots.filter((s) => getSlotHourMinute(s.startTime).hour >= 12);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -63,7 +83,7 @@ export function SlotStep({
               Chọn Ngày & Khung Giờ Hẹn
             </h2>
             <p style={{ fontSize: '0.9rem', color: 'var(--color-text-subtle)' }}>
-              Hệ thống cập nhật tình trạng khung giờ trống theo thời gian thực (Real-time)
+              Hệ thống cập nhật tình trạng khung giờ trống theo thời gian thực
             </p>
           </div>
         </div>
@@ -181,25 +201,48 @@ export function SlotStep({
             <span className="spinner" style={{ borderColor: 'var(--color-secondary)', borderTopColor: 'transparent', width: '24px', height: '24px', marginBottom: '12px' }} />
             <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>Đang tra cứu khung giờ trống của chuyên viên...</div>
           </div>
-        ) : slots.length === 0 ? (
+        ) : activeSlots.length === 0 ? (
           <div
             className="aura-card"
             style={{
-              padding: '32px 24px',
+              padding: '36px 24px',
               textAlign: 'center',
               backgroundColor: '#fffbeb',
               borderColor: '#fde68a',
             }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '36px', color: '#b45309', marginBottom: '8px' }}>
-              event_busy
+            <span className="material-symbols-outlined" style={{ fontSize: '38px', color: '#b45309', marginBottom: '8px' }}>
+              {isSelectedToday ? 'schedule' : 'event_busy'}
             </span>
-            <h3 style={{ fontSize: '1.08rem', color: '#92400e', marginBottom: '4px' }}>
-              Không còn khung giờ trống trong ngày đã chọn
+            <h3 style={{ fontSize: '1.08rem', color: '#92400e', marginBottom: '6px' }}>
+              {isSelectedToday
+                ? 'Đã hết khung giờ phục vụ trong ngày hôm nay'
+                : 'Không còn khung giờ trống trong ngày đã chọn'}
             </h3>
-            <p style={{ fontSize: '0.88rem', color: '#b45309', maxWidth: '440px', margin: '0 auto' }}>
-              Chuyên viên đã kín lịch hẹn hoặc không có ca làm việc vào ngày này. Quý khách vui lòng chọn một ngày khác trên thanh lịch phía trên.
+            <p style={{ fontSize: '0.88rem', color: '#b45309', maxWidth: '460px', margin: '0 auto 16px', lineHeight: 1.5 }}>
+              {isSelectedToday
+                ? 'Toàn bộ ca làm việc trong ngày hôm nay đã kết thúc hoặc đã kín lịch hẹn. Quý khách vui lòng chọn các ngày tiếp theo trên lịch.'
+                : 'Chuyên viên đã kín lịch hẹn hoặc không có ca làm việc vào ngày này. Quý khách vui lòng chọn một ngày khác trên thanh lịch phía trên.'}
             </p>
+            {isSelectedToday && daysList.length > 1 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => onDateChange(daysList[1].dateStr)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 20px',
+                  fontSize: '0.88rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>Xem lịch ngày mai ({daysList[1].dayLabel} - {daysList[1].dateNum})</span>
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_forward</span>
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -244,18 +287,18 @@ export function SlotStep({
                           border: isBooked
                             ? '1px dashed var(--color-border)'
                             : isSelected
-                            ? '2px solid var(--color-secondary)'
-                            : '1px solid var(--color-border)',
+                              ? '2px solid var(--color-secondary)'
+                              : '1px solid var(--color-border)',
                           backgroundColor: isBooked
                             ? '#f8fafc'
                             : isSelected
-                            ? 'var(--color-secondary)'
-                            : 'var(--color-surface-lowest)',
+                              ? 'var(--color-secondary)'
+                              : 'var(--color-surface-lowest)',
                           color: isBooked
                             ? 'var(--color-outline-variant)'
                             : isSelected
-                            ? '#ffffff'
-                            : 'var(--color-text-main)',
+                              ? '#ffffff'
+                              : 'var(--color-text-main)',
                           cursor: isBooked ? 'not-allowed' : 'pointer',
                           opacity: isBooked ? 0.75 : 1,
                           transition: 'all 0.15s ease',
@@ -328,18 +371,18 @@ export function SlotStep({
                           border: isBooked
                             ? '1px dashed var(--color-border)'
                             : isSelected
-                            ? '2px solid var(--color-secondary)'
-                            : '1px solid var(--color-border)',
+                              ? '2px solid var(--color-secondary)'
+                              : '1px solid var(--color-border)',
                           backgroundColor: isBooked
                             ? '#f8fafc'
                             : isSelected
-                            ? 'var(--color-secondary)'
-                            : 'var(--color-surface-lowest)',
+                              ? 'var(--color-secondary)'
+                              : 'var(--color-surface-lowest)',
                           color: isBooked
                             ? 'var(--color-outline-variant)'
                             : isSelected
-                            ? '#ffffff'
-                            : 'var(--color-text-main)',
+                              ? '#ffffff'
+                              : 'var(--color-text-main)',
                           cursor: isBooked ? 'not-allowed' : 'pointer',
                           opacity: isBooked ? 0.75 : 1,
                           transition: 'all 0.15s ease',

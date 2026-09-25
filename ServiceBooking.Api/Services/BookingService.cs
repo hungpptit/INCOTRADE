@@ -45,8 +45,15 @@ public class BookingService : IBookingService
             throw new BadRequestException("Nhân viên này hiện đang ngừng hoạt động.");
         }
 
-        var todayUtc = DateOnly.FromDateTime(DateTime.UtcNow);
-        var maxAllowedDate = todayUtc.AddDays(MaxAdvanceBookingDays - 1);
+        var localNow = GetLocalNow();
+        var todayLocal = DateOnly.FromDateTime(localNow);
+
+        if (parameters.Date < todayLocal)
+        {
+            return new List<AvailableSlotDto>();
+        }
+
+        var maxAllowedDate = todayLocal.AddDays(MaxAdvanceBookingDays - 1);
         if (parameters.Date > maxAllowedDate)
         {
             throw new BadRequestException($"Hệ thống chỉ mở lịch đặt trước tối đa trong vòng {MaxAdvanceBookingDays} ngày tới.");
@@ -76,7 +83,8 @@ public class BookingService : IBookingService
 
         var availableSlots = new List<AvailableSlotDto>();
         var duration = TimeSpan.FromMinutes(service.DurationMinutes);
-        var nowUtc = DateTime.UtcNow;
+        var isToday = parameters.Date == todayLocal;
+        var currentTimeOfDay = localNow.TimeOfDay;
 
         foreach (var shift in shifts)
         {
@@ -93,21 +101,25 @@ public class BookingService : IBookingService
                     continue;
                 }
 
+                // Nếu là ngày hôm nay, bỏ qua các khung giờ đã trôi qua trong quá khứ
+                if (isToday && currentSlotStart <= currentTimeOfDay)
+                {
+                    currentSlotStart = currentSlotEnd;
+                    continue;
+                }
+
                 var slotStartUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotStart), DateTimeKind.Utc);
                 var slotEndUtc = parameters.Date.ToDateTime(TimeOnly.FromTimeSpan(currentSlotEnd), DateTimeKind.Utc);
 
-                if (slotStartUtc > nowUtc)
-                {
-                    var hasConflict = existingBookings.Any(b => slotStartUtc < b.EndTime && slotEndUtc > b.StartTime);
+                var hasConflict = existingBookings.Any(b => slotStartUtc < b.EndTime && slotEndUtc > b.StartTime);
 
-                    availableSlots.Add(new AvailableSlotDto
-                    {
-                        StartTime = slotStartUtc,
-                        EndTime = slotEndUtc,
-                        FormattedTime = $"{currentSlotStart:hh\\:mm} - {currentSlotEnd:hh\\:mm}",
-                        IsAvailable = !hasConflict
-                    });
-                }
+                availableSlots.Add(new AvailableSlotDto
+                {
+                    StartTime = slotStartUtc,
+                    EndTime = slotEndUtc,
+                    FormattedTime = $"{currentSlotStart:hh\\:mm} - {currentSlotEnd:hh\\:mm}",
+                    IsAvailable = !hasConflict
+                });
 
                 currentSlotStart = currentSlotEnd;
             }
@@ -125,7 +137,11 @@ public class BookingService : IBookingService
         }
 
         var startTimeUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-        if (startTimeUtc <= DateTime.UtcNow)
+        var localNow = GetLocalNow();
+        var todayLocal = DateOnly.FromDateTime(localNow);
+        var bookingDate = DateOnly.FromDateTime(startTimeUtc);
+
+        if (bookingDate < todayLocal || (bookingDate == todayLocal && startTimeUtc.TimeOfDay <= localNow.TimeOfDay) || startTimeUtc <= DateTime.UtcNow)
         {
             throw new BadRequestException("Thời gian đặt lịch phải lớn hơn thời gian hiện tại.");
         }
@@ -152,9 +168,7 @@ public class BookingService : IBookingService
             throw new BadRequestException("Không thể đặt lịch với nhân viên đang bị khóa.");
         }
 
-        var bookingDate = DateOnly.FromDateTime(startTimeUtc);
-        var todayBookingDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        var maxBookingDate = todayBookingDate.AddDays(MaxAdvanceBookingDays - 1);
+        var maxBookingDate = todayLocal.AddDays(MaxAdvanceBookingDays - 1);
         if (bookingDate > maxBookingDate)
         {
             throw new BadRequestException($"Hệ thống chỉ mở lịch đặt trước tối đa trong vòng {MaxAdvanceBookingDays} ngày tới.");
@@ -529,4 +543,25 @@ public class BookingService : IBookingService
 
     private static bool IsOverlappingLunch(TimeSpan start, TimeSpan end) =>
         start < LunchEnd && end > LunchStart;
+
+    private static DateTime GetLocalNow()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        }
+        catch
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh");
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            }
+            catch
+            {
+                return DateTime.Now;
+            }
+        }
+    }
 }
